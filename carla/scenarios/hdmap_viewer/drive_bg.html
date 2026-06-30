@@ -1,0 +1,708 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>Tesla-style Live Drive Map (HMI background)</title>
+  <style>
+    /* #1 라이트 테마: 밝은 배경(거의 흰/연회색). */
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #eef1f5; }
+    #app { width: 100vw; height: 100vh; display: block; }
+    /* 라이트맵용 비네트 — 가장자리만 아주 은은하게 밝게 떨어뜨림(흰 쪽으로 페이드).
+       텍스트 뒤 가독성 scrim 은 인터페이스(.drive-bg-scrim)가 담당하므로 여기선 최소. */
+    #vignette {
+      position: absolute; inset: 0; pointer-events: none;
+      background:
+        radial-gradient(150% 130% at 50% 44%, rgba(238,241,245,0) 72%, rgba(238,241,245,0.35) 100%);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="app"></canvas>
+  <div id="vignette"></div>
+
+  <!-- 맵 데이터: index.html 과 동일한 로컬 자산 재사용. -->
+  <script src="data/Town03_roads.js"></script>
+  <script src="data/Town03_buildings.js"></script>
+  <script src="data/Town04_roads.js"></script>
+  <script src="data/Town04_buildings.js"></script>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.161.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+    // ── 라이트 팔레트 (#1 — 다크→라이트 전환) ──────────────────────────
+    // 밝은 배경 / 도로는 약간 진한 연회색 면 / 외곽선은 은은하게.
+    const C = {
+      bg:        0xeef1f5,   // 밝은 배경(거의 흰/연회색)
+      ground:    0xe7eaf0,   // 바닥 — 배경보다 살짝만 진하게
+      road:      0xc7ccd6,   // 도로면(약간 진한 연회색)
+      roadEdge:  0x9aa3b2,   // 도로 외곽 라인(은은하게)
+      building:  0xd2d7e0,   // 미니멀 저채도 건물(밝게)
+      ego:       0x2b3340,   // ego 차체(라이트맵 위에서 또렷한 짙은 실버)
+      // 기본 accent/route 색(HMI 미수신 시 fallback). HMI status 색이 오면 lerp.
+      accent:    0x2f7fe0,   // 기본 파랑(미수신)
+      route:     0x2f7fe0,   // 발광 파란 경로(미수신)
+    };
+
+    const canvas = document.getElementById('app');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+    renderer.shadowMap.enabled = false;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    // #1 라이트: 노출을 낮춰 흰 배경이 과다 발광하지 않게.
+    renderer.toneMappingExposure = 0.92;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(C.bg);
+    // 라이트 안개(멀리 밝은 배경색으로 페이드 → 가장자리 자연스럽게 흰 쪽으로).
+    // #3: fog far 를 더 멀리 둬 줌아웃 상태에서 맵이 더 넓게 비치게.
+    scene.fog = new THREE.Fog(C.bg, 320, 1100);
+
+    const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.5, 6000);
+    camera.position.set(0, 120, 120);
+
+    // 라이트 라이팅(밝고 평탄한 발광 — 라이트맵).
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xcdd3dd, 1.05));
+    const key = new THREE.DirectionalLight(0xffffff, 0.45);
+    key.position.set(80, 180, 40);
+    scene.add(key);
+
+    // 바닥(배경보다 살짝만 진한 밝은 면).
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(12000, 12000),
+      new THREE.MeshBasicMaterial({ color: C.ground })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.2;
+    scene.add(ground);
+
+    // ── Bloom 포스트프로세싱(라이트 — 매우 약하게) ──
+    // 라이트맵은 밝은 면이 많아 블룸이 강하면 전체가 하얗게 날아간다.
+    // → threshold 를 높여 status accent/경로처럼 채도·발광이 있는 부분만 살짝 빛나게.
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    const bloom = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.18,   // strength (라이트라 더 약하게)
+      0.5,    // radius
+      0.92    // threshold (밝은 도로면은 거의 발광 안 함)
+    );
+    composer.addPass(bloom);
+    composer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    composer.setSize(window.innerWidth, window.innerHeight);
+
+    // ── 좌표 변환 (index.html 과 동일 컨벤션) ──
+    //   OpenDRIVE/CARLA (x east, y north/south, z up) → three (x, y up, z = -y)
+    let roadMesh = null, roadEdgeMesh = null, buildingMesh = null;
+
+    function disposeMesh(m) {
+      if (!m) return;
+      scene.remove(m);
+      m.geometry.dispose();
+      if (Array.isArray(m.material)) m.material.forEach(x => x.dispose());
+      else m.material.dispose();
+    }
+
+    // ── #3 도로 스케일 축소 ──
+    // 도로 폭(w)을 줄여 맵 전반이 더 넓게/덜 굵게 보이게. 길이/외곽도 함께 톤다운.
+    const ROAD_W_SCALE = 0.62;   // 도로 폭 축소 비율
+
+    // ── #4 도로 외곽선 벡터화·곡선화 ───────────────────────────────────
+    // 기존: 각 세그먼트를 InstancedMesh plane 으로 깔아 도로면을 구성 → 셀 윤곽이
+    //   계단식(stair-step)으로 각짐. 차선 마킹(laneMesh)도 있었음(#3 으로 제거).
+    // 신규: 세그먼트(중심선+폭)를 coarse 占有 그리드에 래스터화 → marching-squares
+    //   로 경계 contour 추출 → Chaikin 스무딩으로 매끈한 곡선 외곽선(LineSegments,
+    //   벡터)으로 그린다. 도로면은 같은 그리드를 면(Shape)으로 채워 부드럽게.
+    //   (#2 의 iframe opacity 가독성·#3 줌아웃과 함께 은은한 라이트맵 톤 유지.)
+
+    // 占有 그리드 래스터화: 각 세그먼트를 그 길이/폭만큼 셀에 마킹.
+    function rasterizeRoads(roads, cellSize) {
+      let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
+      for (const r of roads) {
+        const x = r.cx, z = -r.cy;
+        const reach = Math.max(r.len, r.w * ROAD_W_SCALE) * 0.5 + cellSize;
+        minX = Math.min(minX, x - reach); maxX = Math.max(maxX, x + reach);
+        minZ = Math.min(minZ, z - reach); maxZ = Math.max(maxZ, z + reach);
+      }
+      const cols = Math.ceil((maxX - minX) / cellSize) + 1;
+      const rows = Math.ceil((maxZ - minZ) / cellSize) + 1;
+      const grid = new Uint8Array(cols * rows);
+      const ix = (gx, gz) => gz * cols + gx;
+      for (const r of roads) {
+        const x = r.cx, z = -r.cy, yaw = -r.hdg;
+        const c = Math.cos(yaw), s = Math.sin(yaw);
+        const hl = r.len * 0.5, hw = r.w * ROAD_W_SCALE * 0.5;
+        // 세그먼트 로컬 박스를 따라 sub-step 으로 셀 마킹.
+        const stepL = Math.max(1, Math.ceil((hl * 2) / cellSize));
+        const stepW = Math.max(1, Math.ceil((hw * 2) / cellSize));
+        for (let a = 0; a <= stepL; a++) {
+          const la = (a / stepL - 0.5) * r.len;
+          for (let b = 0; b <= stepW; b++) {
+            const lb = (b / stepW - 0.5) * r.w * ROAD_W_SCALE;
+            // 로컬(la 길이방향, lb 폭방향) → 월드
+            const wx = x + la * c - lb * s;
+            const wz = z + la * s + lb * c;
+            const gx = Math.round((wx - minX) / cellSize);
+            const gz = Math.round((wz - minZ) / cellSize);
+            if (gx >= 0 && gx < cols && gz >= 0 && gz < rows) grid[ix(gx, gz)] = 1;
+          }
+        }
+      }
+      return { grid, cols, rows, minX, minZ, cellSize };
+    }
+
+    // marching-squares: 占有 그리드 경계를 셀 모서리 선분 집합으로 추출.
+    // 각 2×2 셀 코너 패턴마다 경계 모서리 중점을 잇는 선분을 만든다.
+    function marchingSquares(g) {
+      const { grid, cols, rows, minX, minZ, cellSize } = g;
+      const at = (gx, gz) => (gx < 0 || gz < 0 || gx >= cols || gz >= rows) ? 0 : grid[gz * cols + gx];
+      const segs = []; // [[ax,az,bx,bz], ...] (월드 좌표)
+      const wx = (gx) => minX + gx * cellSize;
+      const wz = (gz) => minZ + gz * cellSize;
+      for (let gz = -1; gz < rows; gz++) {
+        for (let gx = -1; gx < cols; gx++) {
+          const tl = at(gx, gz), tr = at(gx + 1, gz);
+          const bl = at(gx, gz + 1), br = at(gx + 1, gz + 1);
+          const code = (tl << 3) | (tr << 2) | (br << 1) | bl;
+          if (code === 0 || code === 15) continue;
+          // 모서리 중점(셀 변의 중앙).
+          const T = [wx(gx + 0.5), wz(gz)];        // top edge mid
+          const R = [wx(gx + 1),   wz(gz + 0.5)];  // right edge mid
+          const B = [wx(gx + 0.5), wz(gz + 1)];    // bottom edge mid
+          const L = [wx(gx),       wz(gz + 0.5)];  // left edge mid
+          const push = (p, q) => segs.push([p[0], p[1], q[0], q[1]]);
+          switch (code) {
+            case 1:  push(L, B); break;
+            case 2:  push(B, R); break;
+            case 3:  push(L, R); break;
+            case 4:  push(T, R); break;
+            case 5:  push(L, T); push(B, R); break;   // ambiguous
+            case 6:  push(T, B); break;
+            case 7:  push(L, T); break;
+            case 8:  push(T, L); break;
+            case 9:  push(T, B); break;
+            case 10: push(T, R); push(L, B); break;   // ambiguous
+            case 11: push(T, R); break;
+            case 12: push(B, R); break;               // == 12: right? use R,L
+            case 13: push(B, R); break;
+            case 14: push(L, B); break;
+          }
+        }
+      }
+      return segs;
+    }
+
+    // 경계 선분들을 끝점으로 체이닝해 폴리라인(곡선)으로 연결 → Chaikin 스무딩.
+    function chainSegments(segs) {
+      const key = (x, z) => `${Math.round(x * 100)}:${Math.round(z * 100)}`;
+      const adj = new Map();
+      const addAdj = (k, v) => { if (!adj.has(k)) adj.set(k, []); adj.get(k).push(v); };
+      const pts = new Map();
+      for (const [ax, az, bx, bz] of segs) {
+        const ka = key(ax, az), kb = key(bx, bz);
+        pts.set(ka, [ax, az]); pts.set(kb, [bx, bz]);
+        addAdj(ka, kb); addAdj(kb, ka);
+      }
+      const used = new Set();
+      const polylines = [];
+      const segKey = (a, b) => a < b ? a + '|' + b : b + '|' + a;
+      for (const [start] of adj) {
+        for (const next of adj.get(start)) {
+          if (used.has(segKey(start, next))) continue;
+          // 이 선분에서 시작하는 체인을 따라간다.
+          const chain = [start];
+          let cur = start, nxt = next;
+          while (nxt && !used.has(segKey(cur, nxt))) {
+            used.add(segKey(cur, nxt));
+            chain.push(nxt);
+            const cands = adj.get(nxt) || [];
+            let pick = null;
+            for (const c of cands) { if (!used.has(segKey(nxt, c))) { pick = c; break; } }
+            cur = nxt; nxt = pick;
+          }
+          if (chain.length >= 2) polylines.push(chain.map(k => pts.get(k)));
+        }
+      }
+      return polylines;
+    }
+
+    // Chaikin corner-cutting — 계단 폴리라인을 매끈한 곡선으로.
+    function chaikin(poly, iters) {
+      let p = poly;
+      const closed = p.length > 2 &&
+        Math.hypot(p[0][0] - p[p.length - 1][0], p[0][1] - p[p.length - 1][1]) < 0.01;
+      for (let it = 0; it < iters; it++) {
+        const out = [];
+        const n = p.length;
+        if (!closed) out.push(p[0]);
+        for (let i = 0; i < n - 1; i++) {
+          const a = p[i], b = p[i + 1];
+          out.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25]);
+          out.push([a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]);
+        }
+        if (!closed) out.push(p[n - 1]);
+        p = out;
+      }
+      return p;
+    }
+
+    function buildRoads(roads) {
+      disposeMesh(roadMesh); disposeMesh(roadEdgeMesh);
+
+      // 1) 도로면 — 占有 그리드를 살짝 부풀린 plane 셀(merge)로 채운다(부드러운 면).
+      const cell = 7;  // 占有 그리드 셀 크기(m) — 작을수록 윤곽 정밀, 무거움
+      const g = rasterizeRoads(roads, cell);
+      // 면: 占有 셀마다 quad. (BufferGeometry 1개로 머지 → 가벼움)
+      const { grid, cols, rows, minX, minZ } = g;
+      const quadVerts = [];
+      const quadIdx = [];
+      let vbase = 0;
+      const half = cell * 0.62;  // 셀을 약간 겹치게 부풀려 면이 끊기지 않게
+      for (let gz = 0; gz < rows; gz++) {
+        for (let gx = 0; gx < cols; gx++) {
+          if (!grid[gz * cols + gx]) continue;
+          const cx = minX + gx * cell, cz = minZ + gz * cell;
+          quadVerts.push(
+            cx - half, 0.05, cz - half,
+            cx + half, 0.05, cz - half,
+            cx + half, 0.05, cz + half,
+            cx - half, 0.05, cz + half,
+          );
+          quadIdx.push(vbase, vbase + 2, vbase + 1, vbase, vbase + 3, vbase + 2);
+          vbase += 4;
+        }
+      }
+      const roadGeo = new THREE.BufferGeometry();
+      roadGeo.setAttribute('position', new THREE.Float32BufferAttribute(quadVerts, 3));
+      roadGeo.setIndex(quadIdx);
+      const roadMat = new THREE.MeshBasicMaterial({ color: C.road });
+      const rMesh = new THREE.Mesh(roadGeo, roadMat);
+      rMesh.frustumCulled = false;
+      scene.add(rMesh);
+      roadMesh = rMesh;
+
+      // 2) 도로 외곽선 — marching-squares contour → 체이닝 → Chaikin 곡선.
+      const segs = marchingSquares(g);
+      const polylines = chainSegments(segs);
+      const linePos = [];
+      for (const poly of polylines) {
+        if (poly.length < 2) continue;
+        const sm = poly.length > 3 ? chaikin(poly, 2) : poly;
+        for (let i = 0; i < sm.length - 1; i++) {
+          linePos.push(sm[i][0], 0.12, sm[i][1]);
+          linePos.push(sm[i + 1][0], 0.12, sm[i + 1][1]);
+        }
+      }
+      const edgeGeo = new THREE.BufferGeometry();
+      edgeGeo.setAttribute('position', new THREE.Float32BufferAttribute(linePos, 3));
+      const edgeMat = new THREE.LineBasicMaterial({
+        color: C.roadEdge, transparent: true, opacity: 0.85,
+      });
+      const eMesh = new THREE.LineSegments(edgeGeo, edgeMat);
+      eMesh.frustumCulled = false;
+      scene.add(eMesh);
+      roadEdgeMesh = eMesh;
+    }
+
+    function buildBuildings(boxes, cell, scale) {
+      disposeMesh(buildingMesh);
+      const geo = new THREE.BoxGeometry(1, 1, 1);
+      const mat = new THREE.MeshStandardMaterial({
+        color: C.building, roughness: 0.95, metalness: 0.0,
+        transparent: true, opacity: 0.55, flatShading: true,
+      });
+      const mesh = new THREE.InstancedMesh(geo, mat, boxes.length);
+      const m = new THREE.Matrix4();
+      const v = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
+      for (let i = 0; i < boxes.length; i++) {
+        const b = boxes[i];
+        // 건물은 미니멀하게 — 높이 절반으로 낮춰 도로/경로 가독성 우선.
+        const x = b[0] * scale, yMeters = b[1] * scale, h = b[2] * scale * 0.5;
+        v.set(x, h * 0.5, -yMeters);
+        s.set(cell * 0.82, Math.max(1, h), cell * 0.82);
+        m.compose(v, q, s);
+        mesh.setMatrixAt(i, m);
+      }
+      mesh.instanceMatrix.needsUpdate = true; mesh.frustumCulled = false;
+      scene.add(mesh);
+      buildingMesh = mesh;
+    }
+
+    function getData(key) {
+      const d = window.HDMAP_DATA && window.HDMAP_DATA[key];
+      if (!d) throw new Error(`데이터 누락: ${key}.js 미로드`);
+      return d;
+    }
+
+    let currentTown = null;
+    function loadTown(name) {
+      if (name === currentTown) return;
+      try {
+        const roads = getData(`${name}_roads`);
+        const builds = getData(`${name}_buildings`);
+        buildRoads(roads.roads);
+        buildBuildings(builds.boxes, builds.cell, builds.scale);
+        currentTown = name;
+      } catch (e) {
+        console.error('[drive_bg] loadTown 실패:', e.message);
+      }
+    }
+
+    // ── 색 상태(HMI status 동기화) ──────────────────────────────────
+    // HMI(React)가 단계별 status.color 를 postMessage 로 보낸다. 받은 색을
+    // 목표색(targetColor)으로 두고 매 프레임 현재색(curColor)을 부드럽게 lerp.
+    // 경로 리본 + ego accent(루프 스트립/캐빈 emissive/바닥 halo)가 이 색을 따른다.
+    const curColor = new THREE.Color(C.route);
+    const targetColor = new THREE.Color(C.route);
+    let hmiStatus = null;   // 'normal'|'errored'|'progressing'|'resolving' (디버그용)
+
+    // ── ego 차량 메시(깔끔한 테슬라풍 상단뷰 차 형상) ──
+    // accent 계열(스트립·캐빈 emissive·바닥 halo)은 런타임에 색을 갱신할 수 있게
+    // 재질 참조를 보관한다(egoAccentMats).
+    let egoAccentMats = [];
+    function makeCar(bodyColor, scaleMul) {
+      const g = new THREE.Group();
+      const L = 4.7 * (scaleMul || 1), W = 2.0 * (scaleMul || 1), H = 1.4 * (scaleMul || 1);
+      // body — 라운드 박스 느낌. 라이트맵 위에선 짙은 실버 유지(실루엣 또렷).
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(L, H * 0.55, W),
+        new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.42, metalness: 0.45, emissive: 0x10151d, emissiveIntensity: 0.3 })
+      );
+      body.position.y = H * 0.4;
+      g.add(body);
+      // cabin/greenhouse — emissive 를 status accent 로(은은히).
+      const cabinMat = new THREE.MeshStandardMaterial({ color: 0x20262f, roughness: 0.25, metalness: 0.3, emissive: C.accent, emissiveIntensity: 0.22 });
+      const cabin = new THREE.Mesh(new THREE.BoxGeometry(L * 0.5, H * 0.42, W * 0.82), cabinMat);
+      cabin.position.set(-L * 0.04, H * 0.78, 0);
+      g.add(cabin);
+      egoAccentMats.push({ mat: cabinMat, prop: 'emissive' });
+      // accent 라인(루프 글로우) — bloom 으로 살짝 빛남. status accent.
+      const stripMat = new THREE.MeshBasicMaterial({ color: C.accent });
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(L * 0.52, 0.06, W * 0.1), stripMat);
+      strip.position.set(-L * 0.04, H * 1.0, 0);
+      g.add(strip);
+      egoAccentMats.push({ mat: stripMat, prop: 'color' });
+      // 전방 방향 표식(헤드라이트 글로우) — 따뜻한 흰색 유지(방향 가독성).
+      const headMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.3, W * 0.7), headMat);
+      head.position.set(L * 0.5, H * 0.35, 0);
+      g.add(head);
+      g.traverse(o => { o.frustumCulled = false; });
+      return g;
+    }
+
+    let ego = null, egoHalo = null, egoHaloMat = null;
+    function ensureEgo() {
+      if (ego) return;
+      ego = makeCar(C.ego, 1.0);
+      scene.add(ego);
+      // ego 바닥 발광 halo(테슬라 셀렉트 링) — status accent.
+      egoHaloMat = new THREE.MeshBasicMaterial({ color: C.accent, transparent: true, opacity: 0.42, side: THREE.DoubleSide });
+      const halo = new THREE.Mesh(new THREE.RingGeometry(3.4, 4.6, 56), egoHaloMat);
+      halo.rotation.x = -Math.PI / 2;
+      halo.position.y = 0.18;
+      scene.add(halo);
+      egoHalo = halo;
+    }
+
+    // 매 프레임 status 색을 ego accent 재질들 + halo 에 반영(curColor lerp 결과).
+    function applyAccentColor() {
+      for (const { mat, prop } of egoAccentMats) {
+        if (mat[prop]) mat[prop].copy(curColor);
+      }
+      if (egoHaloMat) egoHaloMat.color.copy(curColor);
+    }
+
+    // ── 경로 리본 = 차 주변 짧은 구간만 + 뒤로 갈수록 사라지는 페이드아웃 ──
+    // (유지: 경로 자취 페이드아웃 + status 색 동기화 — 건드리지 말 것.)
+    const MAX_SAMPLES = 220;
+    const TRAIL_KEEP_M = 34;
+    const FWD_GUIDE_M = 22;
+    let pathPts = [];
+    let routeMesh = null;
+    function ensureRoute() {
+      if (routeMesh) return;
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX_SAMPLES * 2 * 3), 3));
+      geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(MAX_SAMPLES * 2 * 4), 4));
+      geo.setIndex(new THREE.BufferAttribute(new Uint16Array((MAX_SAMPLES - 1) * 6), 1));
+      const mat = new THREE.MeshBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 1.0,
+        vertexColors: true,
+        side: THREE.DoubleSide, depthWrite: false,
+        depthTest: false,
+      });
+      routeMesh = new THREE.Mesh(geo, mat);
+      routeMesh.frustumCulled = false;
+      routeMesh.renderOrder = 10;
+      scene.add(routeMesh);
+    }
+
+    function catmull(p0, p1, p2, p3, t) {
+      const t2 = t * t, t3 = t2 * t;
+      return {
+        x: 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t +
+              (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
+              (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
+        z: 0.5 * ((2 * p1.z) + (-p0.z + p2.z) * t +
+              (2 * p0.z - 5 * p1.z + 4 * p2.z - p3.z) * t2 +
+              (-p0.z + 3 * p1.z - 3 * p2.z + p3.z) * t3),
+      };
+    }
+
+    function buildRibbon(headingRad) {
+      ensureRoute();
+      const raw = pathPts.slice();
+      if (raw.length >= 1) {
+        const last = raw[raw.length - 1];
+        const fx = Math.cos(headingRad), fz = Math.sin(headingRad);
+        for (let d = 6; d <= FWD_GUIDE_M; d += 6) {
+          raw.push({ x: last.x + fx * d, z: last.z + fz * d });
+        }
+      }
+      if (raw.length < 2) { routeMesh.geometry.setDrawRange(0, 0); return; }
+
+      const SEG = 6;
+      const sm = [];
+      for (let i = 0; i < raw.length - 1; i++) {
+        const p0 = raw[Math.max(0, i - 1)];
+        const p1 = raw[i];
+        const p2 = raw[i + 1];
+        const p3 = raw[Math.min(raw.length - 1, i + 2)];
+        for (let s = 0; s < SEG; s++) {
+          sm.push(catmull(p0, p1, p2, p3, s / SEG));
+        }
+      }
+      sm.push(raw[raw.length - 1]);
+
+      const n = Math.min(sm.length, MAX_SAMPLES);
+      const start = sm.length - n;
+      const guidePts = Math.max(0, Math.min(FWD_GUIDE_M / 6 | 0, 6)) * SEG;
+      const headIdx = Math.max(0, n - 1 - guidePts);
+
+      const geo = routeMesh.geometry;
+      const pos = geo.attributes.position.array;
+      const col = geo.attributes.color.array;
+      const idx = geo.index.array;
+      const HALF = 1.7;
+      const cr = curColor.r, cg = curColor.g, cb = curColor.b;
+      let ii = 0;
+      for (let i = 0; i < n; i++) {
+        const p = sm[start + i];
+        const a = sm[start + Math.max(0, i - 1)];
+        const b = sm[start + Math.min(n - 1, i + 1)];
+        let tx = b.x - a.x, tz = b.z - a.z;
+        const tl = Math.hypot(tx, tz) || 1; tx /= tl; tz /= tl;
+        const nx = -tz, nz = tx;
+
+        const u = i / (n - 1);
+        const tailA = headIdx > 0 ? Math.min(1, i / (headIdx * 0.9)) : 1;
+        const headA = (n - 1) > headIdx
+          ? Math.max(0, 1 - (i - headIdx) / Math.max(1, (n - 1 - headIdx)))
+          : 1;
+        let alpha = Math.min(tailA, (i <= headIdx ? 1 : headA));
+        // 라이트맵 위에선 경로가 옅으면 잘 안 보여 약간 더 진하게(최대 0.95).
+        alpha *= 0.95;
+
+        const half = HALF * Math.max(0.12, Math.min(1, alpha / 0.45));
+        const vi = i * 2;
+        pos[vi * 3 + 0] = p.x + nx * half; pos[vi * 3 + 1] = 0.2; pos[vi * 3 + 2] = p.z + nz * half;
+        pos[(vi + 1) * 3 + 0] = p.x - nx * half; pos[(vi + 1) * 3 + 1] = 0.2; pos[(vi + 1) * 3 + 2] = p.z - nz * half;
+        const ci = vi * 4;
+        col[ci + 0] = cr; col[ci + 1] = cg; col[ci + 2] = cb; col[ci + 3] = alpha;
+        col[ci + 4] = cr; col[ci + 5] = cg; col[ci + 6] = cb; col[ci + 7] = alpha;
+        if (i < n - 1) {
+          const base = i * 2;
+          idx[ii++] = base; idx[ii++] = base + 1; idx[ii++] = base + 2;
+          idx[ii++] = base + 1; idx[ii++] = base + 3; idx[ii++] = base + 2;
+        }
+      }
+      geo.setDrawRange(0, Math.max(0, (n - 1) * 6));
+      geo.attributes.position.needsUpdate = true;
+      geo.attributes.color.needsUpdate = true;
+      geo.index.needsUpdate = true;
+    }
+
+    // ── 카메라 추적(3인칭 체이스, ego heading 따라 부드럽게 회전) ──
+    // (유지: 3인칭 체이스 카메라.) #3: 거리/높이를 늘려 줌아웃 → 맵 더 넓게.
+    const camState = {
+      pos: new THREE.Vector3(0, 120, 120),
+      target: new THREE.Vector3(0, 0, 0),
+      heading: 0,
+    };
+    const CAM_BACK = 64;    // 차 뒤 거리(↑ 줌아웃)
+    const CAM_HEIGHT = 78;  // 위 높이(↑ 줌아웃 — 맵이 더 넓게 보임)
+    const CAM_AHEAD = 44;   // 타겟을 차 앞쪽으로 (전방 시야)
+    let hasFrame = false;
+
+    function updateChaseCam(egoX, egoZ, headingRad, dt) {
+      let dh = headingRad - camState.heading;
+      while (dh > Math.PI) dh -= Math.PI * 2;
+      while (dh < -Math.PI) dh += Math.PI * 2;
+      camState.heading += dh * Math.min(1, dt * 3.0);
+      const h = camState.heading;
+      const fx = Math.cos(h), fz = Math.sin(h);
+      const desiredPos = new THREE.Vector3(egoX - fx * CAM_BACK, CAM_HEIGHT, egoZ - fz * CAM_BACK);
+      const desiredTgt = new THREE.Vector3(egoX + fx * CAM_AHEAD, 1.5, egoZ + fz * CAM_AHEAD);
+      const k = Math.min(1, dt * 4.5);
+      camState.pos.lerp(desiredPos, k);
+      camState.target.lerp(desiredTgt, k);
+      camera.position.copy(camState.pos);
+      camera.up.set(0, 1, 0);
+      camera.lookAt(camState.target);
+    }
+
+    // ── 텔레메트리(WS) — index.html 컨벤션 재사용 ──
+    const _DEFAULT_WS = 'ws://127.0.0.1:8766';
+    const params = new URLSearchParams(location.search);
+    let WS_URL = params.get('ws') || _DEFAULT_WS;
+    const mapParam = params.get('map');
+
+    loadTown((mapParam === 'Town03' || mapParam === 'Town04') ? mapParam : 'Town03');
+    ensureEgo();
+    ego.position.set(0, 0, 0);
+    if (egoHalo) egoHalo.position.set(0, 0.18, 0);
+    camState.pos.set(0, 110, 110); camState.target.set(0, 0, 0);
+
+    let target = { x: 0, z: 0, yaw: 0 };
+    let render = { x: 0, z: 0, yaw: 0 };
+    let lastPathTime = 0;
+
+    function applyFrame(f) {
+      if (f.map && (f.map === 'Town03' || f.map === 'Town04')) loadTown(f.map);
+      target.x = f.x;
+      target.z = -f.y;
+      target.yaw = -THREE.MathUtils.degToRad(f.yaw);
+      hasFrame = true;
+    }
+
+    let ws = null, reconnectTimer = null;
+    function scheduleReconnect() {
+      if (reconnectTimer) return;
+      reconnectTimer = setTimeout(() => { reconnectTimer = null; if (!ws) connectWS(); }, 1200);
+    }
+    function connectWS() {
+      try { ws = new WebSocket(WS_URL); }
+      catch (e) { scheduleReconnect(); return; }
+      ws.onmessage = ev => {
+        let f; try { f = JSON.parse(ev.data); } catch { return; }
+        if (!f || f.source === '6dof' || f.type === 'motion'
+            || f.type === 'scenario_event' || typeof f.x !== 'number') return;
+        try { applyFrame(f); } catch (e) { console.error(e); }
+      };
+      ws.onclose = () => { ws = null; scheduleReconnect(); };
+      ws.onerror = () => {};
+    }
+    if (params.get('autoconnect') !== '0') connectWS();
+
+    // ── HMI status 색 동기화 (postMessage 핸드셰이크) ───────────────────
+    function parseColor(c) {
+      try { return new THREE.Color(c); } catch { return null; }
+    }
+    window.addEventListener('message', (ev) => {
+      const d = ev.data;
+      if (!d || typeof d !== 'object') return;
+      if (d.type === 'hmi-status') {
+        const col = parseColor(d.color);
+        if (col) targetColor.copy(col);
+        if (typeof d.status === 'string') hmiStatus = d.status;
+        if (d.map && (d.map === 'Town03' || d.map === 'Town04')) loadTown(d.map);
+      }
+    });
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'drive-bg-ready' }, '*');
+      }
+    } catch (e) {}
+
+    // 디버그/검증용: URL ?status=errored 로 초기색을 강제(headless 캡처 편의).
+    const statusParam = params.get('status');
+    if (statusParam) {
+      const PRESET = {
+        normal: '#34C759', errored: '#FF3B30', progressing: '#FF9500', resolving: '#FFCC00',
+      };
+      const col = parseColor(PRESET[statusParam] || statusParam);
+      if (col) { targetColor.copy(col); curColor.copy(col); hmiStatus = statusParam; }
+    }
+
+    // 디버그/검증용: ?demo=1 → WS 없이 ego 를 원형으로 주행시켜 맵/경로/외곽선 확인.
+    const demoMode = params.get('demo') === '1';
+    let demoT = 0;
+
+    // ── 렌더 루프 ──
+    let prev = performance.now();
+    function animate() {
+      requestAnimationFrame(animate);
+      const now = performance.now();
+      const dt = Math.min(0.05, (now - prev) / 1000);
+      prev = now;
+
+      curColor.lerp(targetColor, Math.min(1, dt * 3.2));
+      applyAccentColor();
+
+      if (demoMode) {
+        demoT += dt * 0.25;
+        const R = 60;
+        target.x = Math.cos(demoT) * R;
+        target.z = Math.sin(demoT) * R;
+        target.yaw = demoT + Math.PI / 2;
+        hasFrame = true;
+      }
+
+      if (hasFrame) {
+        const kp = Math.min(1, dt * 8);
+        render.x += (target.x - render.x) * kp;
+        render.z += (target.z - render.z) * kp;
+        let dy = target.yaw - render.yaw;
+        while (dy > Math.PI) dy -= Math.PI * 2;
+        while (dy < -Math.PI) dy += Math.PI * 2;
+        render.yaw += dy * Math.min(1, dt * 6);
+
+        ego.position.set(render.x, 0, render.z);
+        ego.rotation.y = -render.yaw + Math.PI;
+        if (egoHalo) egoHalo.position.set(render.x, 0.18, render.z);
+
+        if (now - lastPathTime > 80) {
+          lastPathTime = now;
+          const last = pathPts[pathPts.length - 1];
+          if (!last || Math.hypot(last.x - render.x, last.z - render.z) > 1.2) {
+            pathPts.push({ x: render.x, z: render.z });
+            let acc = 0;
+            let cut = 0;
+            for (let i = pathPts.length - 1; i > 0; i--) {
+              acc += Math.hypot(pathPts[i].x - pathPts[i - 1].x, pathPts[i].z - pathPts[i - 1].z);
+              if (acc > TRAIL_KEEP_M) { cut = i - 1; break; }
+            }
+            if (cut > 0) pathPts.splice(0, cut);
+            if (pathPts.length > 160) pathPts.splice(0, pathPts.length - 160);
+          }
+        }
+        buildRibbon(render.yaw);
+        updateChaseCam(render.x, render.z, render.yaw, dt);
+      }
+
+      composer.render();
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight, false);
+      composer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>

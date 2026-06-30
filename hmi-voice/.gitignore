@@ -1,0 +1,18 @@
+node_modules/
+dist/
+.DS_Store
+*.local
+.env
+.env.local
+.env.*.local
+node_modules
+
+# Handover notes (local only)
+HANDOVER-*.md
+handover*.md
+
+# Local Claude config / worktrees
+.claude/
+
+# Nested standalone repo (separate git project, not part of this one)
+HCI-prototype/

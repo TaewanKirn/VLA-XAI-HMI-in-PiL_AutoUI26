@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>CARLA HDMap Viewer — Town03 / Town04</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #0e1116; color: #e6e6e6;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; }
+    #app { width: 100vw; height: 100vh; display: block; }
+    #panel {
+      position: absolute; top: 14px; left: 14px; padding: 12px 14px;
+      background: rgba(20, 24, 32, 0.85); border: 1px solid #2a3140;
+      border-radius: 8px; backdrop-filter: blur(6px);
+      font-size: 13px; line-height: 1.5; max-width: 320px;
+    }
+    #panel h1 { font-size: 15px; margin: 0 0 8px; font-weight: 600; }
+    #panel label { display: block; margin-top: 6px; }
+    #panel select, #panel input[type=range] { width: 100%; }
+    #panel .row { display: flex; gap: 8px; align-items: center; }
+    #panel .row input[type=range] { flex: 1; }
+    #panel .stat { color: #9aa4b2; font-size: 12px; margin-top: 8px; }
+    #panel .key { color: #7fbcff; }
+    #loader {
+      position: absolute; inset: 0; display: grid; place-items: center;
+      background: rgba(14,17,22,0.7); pointer-events: none; opacity: 0;
+      transition: opacity .2s;
+    }
+    #loader.show { opacity: 1; pointer-events: auto; }
+    #loader span {
+      padding: 8px 14px; background: #1a1f2a; border: 1px solid #2a3140;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="app"></canvas>
+
+  <div id="panel">
+    <h1>CARLA HDMap Viewer</h1>
+    <label>맵 선택
+      <select id="town">
+        <option value="Town03">Town03</option>
+        <option value="Town04">Town04</option>
+      </select>
+    </label>
+    <label>건물 표시
+      <div class="row">
+        <input id="buildingsOn" type="checkbox" checked />
+        <span>on/off</span>
+      </div>
+    </label>
+    <label>도로 표시
+      <div class="row">
+        <input id="roadsOn" type="checkbox" checked />
+        <span>on/off</span>
+      </div>
+    </label>
+    <label>건물 높이 스케일
+      <div class="row">
+        <input id="heightScale" type="range" min="0.3" max="3" step="0.1" value="1" />
+        <span id="heightScaleV">1.0×</span>
+      </div>
+    </label>
+
+    <hr style="border:none;border-top:1px solid #2a3140;margin:10px 0" />
+    <label style="margin-top:6px">
+      <div class="row">
+        <input id="followCam" type="checkbox" />
+        <span>카메라 자동 추적</span>
+      </div>
+    </label>
+    <label>
+      <div class="row">
+        <input id="trailOn" type="checkbox" checked />
+        <span>이동 자취 표시</span>
+        <button id="trailClear" style="background:#1a1f2a;color:#aaa;border:1px solid #2a3140;border-radius:4px;padding:2px 8px;cursor:pointer">지움</button>
+      </div>
+    </label>
+
+    <div class="stat" id="wsStat">텔레메트리: 미연결</div>
+    <div class="stat" id="stat">로딩 중…</div>
+    <div class="stat">
+      <span class="key">드래그</span> 회전 ·
+      <span class="key">우클릭</span> 이동 ·
+      <span class="key">휠</span> 줌
+    </div>
+  </div>
+
+  <div id="loader"><span>로딩 중…</span></div>
+
+  <!-- 맵 데이터: <script>로 직접 로드 → index.html을 더블클릭(file://)으로 열어도 동작.
+       (fetch는 file://에서 막혀 예전엔 serve.bat 같은 HTTP 서버가 필요했음) -->
+  <script src="data/Town03_roads.js"></script>
+  <script src="data/Town03_buildings.js"></script>
+  <script src="data/Town04_roads.js"></script>
+  <script src="data/Town04_buildings.js"></script>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.161.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    const canvas = document.getElementById('app');
+    const statEl = document.getElementById('stat');
+    const loaderEl = document.getElementById('loader');
+    const townSel = document.getElementById('town');
+    const buildingsOn = document.getElementById('buildingsOn');
+    const roadsOn = document.getElementById('roadsOn');
+    const heightScale = document.getElementById('heightScale');
+    const heightScaleV = document.getElementById('heightScaleV');
+
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight, false);
+    renderer.shadowMap.enabled = false;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0e1116);
+    scene.fog = new THREE.Fog(0x0e1116, 1500, 4500);
+
+    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 1, 8000);
+    camera.position.set(600, 600, 600);
+
+    const controls = new OrbitControls(camera, canvas);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.1;
+    controls.maxPolarAngle = Math.PI * 0.49;
+
+    // Lights.
+    const hemi = new THREE.HemisphereLight(0xbcd3ff, 0x202028, 0.55);
+    scene.add(hemi);
+    const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+    sun.position.set(400, 800, 200);
+    scene.add(sun);
+
+    // Ground reference plane.
+    const ground = new THREE.Mesh(
+      new THREE.PlaneGeometry(6000, 6000),
+      new THREE.MeshStandardMaterial({ color: 0x121620, roughness: 1.0 })
+    );
+    ground.rotation.x = -Math.PI / 2;
+    ground.position.y = -0.05;
+    scene.add(ground);
+
+    // Subtle grid.
+    const grid = new THREE.GridHelper(4000, 80, 0x223044, 0x182030);
+    grid.position.y = 0;
+    scene.add(grid);
+
+    // Containers for swap-on-town-change.
+    let roadMesh = null;
+    let buildingMesh = null;
+    let currentBoxes = null;       // raw building boxes for re-scale
+    let currentCell = 0;
+
+    // --- Telemetry state ---
+    let ws = null;
+    let vehicleMarker = null;
+    let trailLine = null;
+    let trailPositions = [];     // flat array x,y,z,x,y,z...
+    const MAX_TRAIL_POINTS = 4000;
+    let followCam = false;
+    let lastFrame = null;
+
+    function disposeMesh(m) {
+      if (!m) return;
+      scene.remove(m);
+      m.geometry.dispose();
+      if (Array.isArray(m.material)) m.material.forEach(x => x.dispose());
+      else m.material.dispose();
+    }
+
+    function buildRoads(roads) {
+      disposeMesh(roadMesh);
+      const geo = new THREE.BoxGeometry(1, 1, 1);
+      const mat = new THREE.MeshStandardMaterial({ color: 0x2e3340, roughness: 0.95 });
+      const mesh = new THREE.InstancedMesh(geo, mat, roads.length);
+      const m = new THREE.Matrix4();
+      const q = new THREE.Quaternion();
+      const yAxis = new THREE.Vector3(0, 1, 0);
+      const ROAD_H = 0.3;
+      for (let i = 0; i < roads.length; i++) {
+        const r = roads[i];
+        // OpenDRIVE (x east, y north, z up) -> Three.js (x, y up, z south).
+        const x = r.cx;
+        const z = -r.cy;
+        const yaw = -r.hdg;   // because z = -y
+        q.setFromAxisAngle(yAxis, yaw);
+        m.compose(
+          new THREE.Vector3(x, ROAD_H * 0.5, z),
+          q,
+          new THREE.Vector3(r.len, ROAD_H, r.w)
+        );
+        mesh.setMatrixAt(i, m);
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.frustumCulled = false;
+      scene.add(mesh);
+      roadMesh = mesh;
+      roadMesh.visible = roadsOn.checked;
+    }
+
+    function buildBuildings(boxes, cell, scale) {
+      disposeMesh(buildingMesh);
+      const geo = new THREE.BoxGeometry(1, 1, 1);
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0xa9b3c4,
+        roughness: 0.8,
+        flatShading: true,
+      });
+      const mesh = new THREE.InstancedMesh(geo, mat, boxes.length);
+      const m = new THREE.Matrix4();
+      const v = new THREE.Vector3();
+      const q = new THREE.Quaternion();
+      const s = new THREE.Vector3();
+      const hScale = parseFloat(heightScale.value);
+      const colors = new Float32Array(boxes.length * 3);
+      const baseColor = new THREE.Color();
+      for (let i = 0; i < boxes.length; i++) {
+        const b = boxes[i];
+        const x = b[0] * scale;
+        const yMeters = b[1] * scale;
+        const h = b[2] * scale * hScale;
+        v.set(x, h * 0.5, -yMeters);
+        s.set(cell * 0.92, Math.max(1, h), cell * 0.92);
+        m.compose(v, q, s);
+        mesh.setMatrixAt(i, m);
+        // Color gradient by height: low warm, tall cool.
+        const t = Math.min(1, h / 40);
+        baseColor.setHSL(0.58 - t * 0.18, 0.22 + t * 0.15, 0.55 - t * 0.1);
+        colors[i*3+0] = baseColor.r;
+        colors[i*3+1] = baseColor.g;
+        colors[i*3+2] = baseColor.b;
+      }
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
+      mesh.frustumCulled = false;
+      scene.add(mesh);
+      buildingMesh = mesh;
+      buildingMesh.visible = buildingsOn.checked;
+    }
+
+    function rebuildBuildingsScale() {
+      if (!currentBoxes) return;
+      buildBuildings(currentBoxes.boxes, currentCell, currentBoxes.scale);
+    }
+
+    function getData(key) {
+      const d = window.HDMAP_DATA && window.HDMAP_DATA[key];
+      if (!d) throw new Error(`데이터 누락: ${key}.js 가 로드되지 않음`);
+      return d;
+    }
+
+    function loadTown(name) {
+      loaderEl.classList.add('show');
+      statEl.textContent = `${name} 로딩 중…`;
+      try {
+        const roads = getData(`${name}_roads`);
+        const builds = getData(`${name}_buildings`);
+        buildRoads(roads.roads);
+        currentBoxes = builds;
+        currentCell = builds.cell;
+        buildBuildings(builds.boxes, builds.cell, builds.scale);
+
+        // 카메라: 탑뷰(바로 위) · 북쪽 위 고정 · 전체 맵이 한 화면에 들어오게 fit.
+        //   좌표계: three.js x=동, z=-북 → 북쪽 = -z. 카메라를 중심에서 아주 살짝
+        //   남(+z)쪽에 둬서 내려다볼 때 북쪽(-z)이 화면 위로 오게 한다(오프셋이 미세해
+        //   사실상 정탑뷰). east(+x)는 화면 오른쪽 → 표준 지도 방향(N↑·E→).
+        // 타이트 fit — 외곽으로 길게 뻗은 소수 outlier 도로(고속도로 램프 끝 등)가
+        //   bbox 를 과대팽창시키므로(Town03 은 2019m→실질 ~590m), 도로 세그먼트 중심의
+        //   백분위(상·하위 0.5% 제외)로 '실질 도로망' 범위를 잡는다. C2 고속도로 루프는 유지.
+        const TRIM = 0.005;
+        const segs = roads.roads;
+        const xsArr = segs.map(r => r.cx).sort((a, b) => a - b);
+        const ysArr = segs.map(r => r.cy).sort((a, b) => a - b);
+        const pc = (arr, p) => arr[Math.min(arr.length - 1, Math.max(0, Math.round(p * (arr.length - 1))))];
+        const minX = pc(xsArr, TRIM), maxX = pc(xsArr, 1 - TRIM);
+        const minY = pc(ysArr, TRIM), maxY = pc(ysArr, 1 - TRIM);
+        const cx = (minX + maxX) / 2;
+        const cy = (minY + maxY) / 2;
+        const spanX = Math.max(1, maxX - minX);   // 동서 (화면 가로)
+        const spanY = Math.max(1, maxY - minY);   // 남북 (화면 세로)
+        const span  = Math.max(spanX, spanY);
+        const fov    = camera.fov * Math.PI / 180;
+        const aspect = camera.aspect;
+        const fitV = (spanY / 2) / Math.tan(fov / 2);                // 세로(남북) 맞춤 높이
+        const fitH = (spanX / 2) / (Math.tan(fov / 2) * aspect);     // 가로(동서) 맞춤 높이
+        // 맵별 확대 배율 (1.0=전체 fit, <1=더 크게 확대). Town04 는 세로로 길어 가로 여백이
+        //   남으므로 더 키워 화면을 채운다(루프 가장자리는 살짝 잘릴 수 있음 — followCam 으로 추적 가능).
+        const TOWN_ZOOM = { Town04: 0.82 };
+        const H = Math.max(fitV, fitH) * 1.08 * (TOWN_ZOOM[name] || 1.0);
+        controls.target.set(cx, 0, -cy);
+        camera.up.set(0, 1, 0);
+        camera.position.set(cx, H, -cy + Math.max(1, H * 0.001));    // 바로 위 + 미세 남쪽 → 북쪽 위
+        // 큰 맵(수 km)이 far/fog 안쪽에 들어오도록 확장 (탑뷰 가장자리까지 또렷하게).
+        camera.far = Math.max(camera.far, H * 4);
+        camera.updateProjectionMatrix();
+        scene.fog.near = Math.max(scene.fog.near, H * 1.6);
+        scene.fog.far  = Math.max(scene.fog.far,  H * 4);
+        controls.update();
+
+        statEl.innerHTML = `<b>${name}</b><br>도로 세그먼트 ${roads.roads.length.toLocaleString()}개<br>건물 셀 ${builds.boxes.length.toLocaleString()}개<br>맵 크기 ${span.toFixed(0)} m`;
+      } catch (e) {
+        statEl.textContent = `로딩 실패: ${e.message}`;
+      } finally {
+        loaderEl.classList.remove('show');
+      }
+    }
+
+    // --- Vehicle marker + trail ---
+    function ensureMarker() {
+      if (vehicleMarker) return;
+      // Body: thin cone pointing forward.
+      const group = new THREE.Group();
+      const coneGeo = new THREE.ConeGeometry(2.2, 6.0, 4);
+      coneGeo.rotateX(Math.PI / 2);   // point along +x (matches yaw=0)
+      const coneMat = new THREE.MeshStandardMaterial({ color: 0xffcc33, emissive: 0x553300, roughness: 0.4 });
+      const cone = new THREE.Mesh(coneGeo, coneMat);
+      cone.position.y = 1.5;
+      group.add(cone);
+      // Vertical pin to make it easy to spot from far away.
+      const pinGeo = new THREE.CylinderGeometry(0.35, 0.35, 30, 8);
+      const pinMat = new THREE.MeshBasicMaterial({ color: 0xff5544 });
+      const pin = new THREE.Mesh(pinGeo, pinMat);
+      pin.position.y = 16;
+      group.add(pin);
+      // Halo on the ground.
+      const haloGeo = new THREE.RingGeometry(4, 5.5, 32);
+      const haloMat = new THREE.MeshBasicMaterial({ color: 0xff5544, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
+      const halo = new THREE.Mesh(haloGeo, haloMat);
+      halo.rotation.x = -Math.PI / 2;
+      halo.position.y = 0.1;
+      group.add(halo);
+      scene.add(group);
+      vehicleMarker = group;
+    }
+
+    function ensureTrail() {
+      if (trailLine) return;
+      const geo = new THREE.BufferGeometry();
+      const pos = new Float32Array(MAX_TRAIL_POINTS * 3);
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      geo.setDrawRange(0, 0);
+      const mat = new THREE.LineBasicMaterial({ color: 0xff8855, transparent: true, opacity: 0.85 });
+      trailLine = new THREE.Line(geo, mat);
+      trailLine.frustumCulled = false;
+      scene.add(trailLine);
+    }
+
+    function pushTrailPoint(x, y, z) {
+      ensureTrail();
+      const geo = trailLine.geometry;
+      const arr = geo.attributes.position.array;
+      if (trailPositions.length >= MAX_TRAIL_POINTS) {
+        trailPositions.shift();
+      }
+      trailPositions.push([x, y, z]);
+      for (let i = 0; i < trailPositions.length; i++) {
+        arr[i*3+0] = trailPositions[i][0];
+        arr[i*3+1] = trailPositions[i][1];
+        arr[i*3+2] = trailPositions[i][2];
+      }
+      geo.attributes.position.needsUpdate = true;
+      geo.setDrawRange(0, trailPositions.length);
+    }
+
+    function clearTrail() {
+      trailPositions = [];
+      if (trailLine) {
+        trailLine.geometry.setDrawRange(0, 0);
+      }
+    }
+
+    function applyFrame(f) {
+      // CARLA world (x east, y SOUTH, z up) -> viewer (x, y up, z = -carla.y)
+      const vx = f.x;
+      const vy = f.z + 0.5;     // hover slightly above road
+      const vz = -f.y;
+      ensureMarker();
+      vehicleMarker.position.set(vx, vy, vz);
+      // CARLA yaw is degrees, positive clockwise viewed from above (left-hand UE).
+      // After y-mirror to right-hand viewer, we negate.
+      const yawRad = -THREE.MathUtils.degToRad(f.yaw);
+      vehicleMarker.rotation.y = yawRad;
+
+      if (trailOn.checked) {
+        pushTrailPoint(vx, 0.4, vz);
+      }
+
+      if (followCam) {
+        const off = new THREE.Vector3(-60, 80, -60);
+        camera.position.lerp(new THREE.Vector3(vx + off.x, vy + off.y, vz + off.z), 0.15);
+        controls.target.lerp(new THREE.Vector3(vx, vy, vz), 0.2);
+      }
+
+      // HUD.
+      document.getElementById('wsStat').innerHTML =
+        `텔레메트리: <b style="color:#7dffb0">연결됨</b> · actor ${f.id}` +
+        `<br>속도 <b>${f.speed.toFixed(1)} km/h</b>` +
+        `<br>map ${f.map} · x=${f.x.toFixed(1)} y=${f.y.toFixed(1)} z=${f.z.toFixed(1)} yaw=${f.yaw.toFixed(0)}°`;
+
+      // Auto-switch town if the server reports a different map.
+      if (f.map && townSel.value !== f.map && (f.map === 'Town03' || f.map === 'Town04')) {
+        townSel.value = f.map;
+        loadTown(f.map);
+      }
+
+      lastFrame = f;
+    }
+
+    // 텔레메트리는 자동연결 + 자동 재연결 (수동 연결/해제 버튼 없음).
+    //   ws 주소: 기본 127.0.0.1:8765, ?ws= 파라미터로 덮어쓰기 가능.
+    const _DEFAULT_WS = 'ws://127.0.0.1:8766';  // 2026-06-19: 8765→8766 (B안 음성 충돌 회피). launch_map 이 ?ws= 로 덮어씀.
+    let WS_URL = _DEFAULT_WS;
+    let _reconnectTimer = null;
+    function _scheduleReconnect() {
+      if (_reconnectTimer) return;
+      _reconnectTimer = setTimeout(() => { _reconnectTimer = null; if (!ws) connectWS(); }, 1200);
+    }
+
+    function connectWS() {
+      const url = WS_URL;
+      if (ws) { ws.close(); ws = null; }
+      try {
+        ws = new WebSocket(url);
+      } catch (e) {
+        document.getElementById('wsStat').textContent = `텔레메트리: 오류 ${e.message}`;
+        _scheduleReconnect();
+        return;
+      }
+      document.getElementById('wsStat').textContent = '텔레메트리: 연결 중…';
+      ws.onmessage = ev => {
+        let f;
+        try { f = JSON.parse(ev.data); }
+        catch (e) { console.error('frame parse error', e); return; }
+        // collector 는 매 tick CARLA 위치 프레임(source:carla, x/y/z 포함) 외에
+        //   6DOF 모션 프레임(source:6dof, type:motion)·scenario_event 도 같은 WS 로 보낸다.
+        //   위치가 없는(=x 없는) 메시지를 applyFrame 에 넘기면 마커가 NaN 으로 튀어
+        //   '떴다 사라졌다' 깜빡임이 생긴다 → 위치 프레임만 통과.
+        if (!f || f.source === '6dof' || f.type === 'motion'
+            || f.type === 'scenario_event' || typeof f.x !== 'number') return;
+        try { applyFrame(f); }
+        catch (e) { console.error('frame apply error', e); }
+      };
+      ws.onclose = () => {
+        document.getElementById('wsStat').textContent = '텔레메트리: 재연결 대기…';
+        ws = null;
+        _scheduleReconnect();                 // 끊기면 자동 재연결
+      };
+      ws.onerror = () => {
+        document.getElementById('wsStat').textContent = '텔레메트리: 오류 (서버 켜져 있는지 확인)';
+      };
+    }
+    // (연결/해제 버튼 제거 — 자동연결+자동재연결로 충분)
+    document.getElementById('followCam').addEventListener('change', e => { followCam = e.target.checked; });
+    document.getElementById('trailClear').addEventListener('click', clearTrail);
+    const trailOn = document.getElementById('trailOn');
+    trailOn.addEventListener('change', () => {
+      if (trailLine) trailLine.visible = trailOn.checked;
+    });
+
+    townSel.addEventListener('change', () => loadTown(townSel.value));
+    buildingsOn.addEventListener('change', () => { if (buildingMesh) buildingMesh.visible = buildingsOn.checked; });
+    roadsOn.addEventListener('change', () => { if (roadMesh) roadMesh.visible = roadsOn.checked; });
+    heightScale.addEventListener('input', () => {
+      heightScaleV.textContent = `${parseFloat(heightScale.value).toFixed(1)}×`;
+      rebuildBuildingsScale();
+    });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight, false);
+    });
+
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // ── URL 파라미터 (시나리오 자동 오픈용) ──
+    //   ?map=Town04         초기 맵 선택 (없어도 첫 프레임의 map 으로 자동 전환됨)
+    //   ?ws=ws://host:port  텔레메트리 주소 지정
+    //   ?autoconnect=0      자동연결 끔(수동). 기본은 자동연결.
+    // ★ 이 클론 사본은 기본 자동연결 — file:// 로 열려 쿼리가 떨어져 나가도 바로 붙고,
+    //   서버가 아직 안 떴으면 자동 재연결로 계속 시도한다('연결' 클릭 불필요).
+    const _params = new URLSearchParams(location.search);
+    const _wsParam  = _params.get('ws');
+    const _mapParam = _params.get('map');
+    if (_wsParam) WS_URL = _wsParam;
+    if (_mapParam === 'Town03' || _mapParam === 'Town04') townSel.value = _mapParam;
+    loadTown(townSel.value);
+    if (_params.get('autoconnect') !== '0') connectWS();   // 기본 자동연결 (+ 자동 재연결)
+  </script>
+</body>
+</html>

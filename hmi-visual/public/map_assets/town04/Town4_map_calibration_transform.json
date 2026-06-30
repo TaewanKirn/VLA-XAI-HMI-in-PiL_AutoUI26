@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "purpose": "map_png_xodr_calibration",
+  "canvas": {
+    "width": 2048,
+    "height": 2048
+  },
+  "image": {
+    "file": "Town04_map_design.png",
+    "naturalWidth": 2048,
+    "naturalHeight": 2048,
+    "transform": {
+      "offsetX_px": -5,
+      "offsetY_px": -106,
+      "scaleX": 1.103,
+      "scaleY": 1.098,
+      "scale": 1.1005,
+      "rotation_deg": 0,
+      "opacity": 0.7
+    }
+  },
+  "reference": {
+    "file": "Town04.xodr",
+    "type": "xodr",
+    "polylineCount": 1215,
+    "bounds_world": {
+      "minX": -499.51791680033705,
+      "maxX": 409.22784508993846,
+      "minY": -420.25595516321243,
+      "maxY": 380.39002636833754
+    },
+    "baseFitTransform": {
+      "scale_px_per_meter": 2.165622204285583,
+      "offsetX_px": 40,
+      "offsetY_px": 157.0516423116253,
+      "minX": -499.51791680033705,
+      "minY": -420.25595516321243,
+      "maxX": 409.22784508993846,
+      "maxY": 380.39002636833754
+    },
+    "adjustment": {
+      "offsetX_px": 0,
+      "offsetY_px": 0,
+      "scaleX": 1,
+      "scaleY": 1,
+      "scale": 1,
+      "rotation_deg": 0,
+      "opacity": 0.7,
+      "strokeWidth_px": 3
+    }
+  },
+  "usage_note": "Apply the image transform relative to the same canvas size. Reference transform maps XODR world coordinates to image/canvas coordinates."
+}

@@ -1,0 +1,1487 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design Tokens ──────────────────────────────────── */
+:root {
+  --bg-primary: #f7f8fa;
+  --bg-white: #ffffff;
+  --text-primary: #131417;
+  --text-secondary: #99a1af;
+  --text-muted: #a0a0a5;
+  --divider-tertiary: rgba(19, 20, 23, 0.2);
+  --divider-light: rgba(19, 20, 23, 0.08);
+  --shadow-level1-y: 6px;
+  --shadow-level1-blur: 24px;
+  --shadow-level1: 0px 6px 12px rgba(0, 0, 0, 0.08);
+  font-family: 'Pretendard Variable', 'Pretendard', system-ui, -apple-system, sans-serif;
+}
+
+/* ── Global Reset ───────────────────────────────────── */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body {
+  margin: 0;
+}
+
+body {
+  min-width: 320px;
+  background-color: #000;
+}
+
+#root {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* ── HMI viewport: fits the fixed 1920×1080 screen to the display ──
+   Letterboxes (black bars) on non-16:9 displays, never scrolls. */
+.hmi-viewport {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  overflow: hidden;
+}
+
+/* ── Screen Container ───────────────────────────────── */
+.screen {
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+  flex-shrink: 0;
+  transform-origin: center center;
+  overflow: hidden;
+  /* Flat greyscale base (Figma 311:7551). The animated holographic gradient
+     was removed with the voice-focus redesign. */
+  background: #f8f8f8;
+  font-family: 'Pretendard Variable', 'Pretendard', sans-serif;
+}
+
+/* ── Rotated Background Image ───────────────────────── */
+.bg-rotated-image {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1920px;
+  height: 1080px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.bg-rotated-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 1;
+}
+
+/* ── 라이브 주행 맵: 풀블리드 고정 배경 (z 최하·클릭통과) ──
+   시각 HMI(HCI-prototype-interface)의 .drive-bg-iframe 을 byte-동일 미러링 = 변인통제.
+   .screen 이 #f8f8f8 흰 받침이라 opacity 0.30 이어도 도로/경로/내 차가 밝게 비친다.
+   z0 = 모든 음성 UI(top-bar z30, layout-container z10, bottom-bar z30) 아래. */
+.drive-bg-iframe {
+  position: absolute;
+  inset: 0;
+  width: 1920px;
+  height: 1080px;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: block;
+  z-index: 0;            /* 모든 UI 아래 */
+  pointer-events: none;  /* 음성 UI(보이스바·앱카드) 클릭이 맵으로 새지 않게 */
+  background: #f7f8fa;   /* iframe 로드 전/실패 시에도 밝은 배경 톤으로 graceful */
+  opacity: 0.30;         /* 맵은 은은히 비치되 위 텍스트(상태칩·보이스바) 가독성 우선 */
+}
+
+/* 내비 패널 열림 시: 메인 영역 풀블리드 맵 iframe 을 숨겨 배경색만 노출(맵 두 개 중복 제거).
+   시각 HMI 의 `.screen.nav-panel-open .drive-bg-iframe { display:none }` 를 byte-동일 미러링
+   = 변인통제. activeApp==='Navigation' 일 때 App.jsx 가 .screen 에 nav-panel-open 토글. */
+.screen.nav-panel-open .drive-bg-iframe {
+  display: none;
+}
+.screen.nav-panel-open {
+  /* 맵을 숨긴 메인 영역을 라이트 배경색으로 채움(시각과 동일). */
+  background: var(--bg-primary, #f7f8fa);
+}
+
+/* 우측 '내비게이션' 패널 본문의 라이브 맵 뷰어 — 배경 레이어가 아니라 실제 지도 화면이므로
+   전경(opacity 1)으로 또렷하게 표시. 시각 HMI(.map-panel-iframe)와 동일 = 변인통제.
+   패널이 열렸을 때만 마운트되고, 닫히면 언마운트되어 WS/WebGL 이 해제된다. */
+.map-panel-iframe {
+  border: none;
+  display: block;
+  opacity: 1;
+  background: #f7f8fa;   /* iframe 로드 전/실패 시에도 밝은 톤 */
+}
+
+/* 맵 위 은은한 흰 워시 — 보이스바·상태칩·앱카드 가독성 확보(맵은 순수 배경).
+   z1 = 맵 위, UI 아래. 시각 .drive-bg-scrim 과 동일 규칙. */
+.drive-bg-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 65% at 50% 46%, rgba(248,248,248,0.30) 0%, rgba(248,248,248,0.0) 60%),
+    linear-gradient(180deg, rgba(248,248,248,0.50) 0%, rgba(248,248,248,0.0) 16%,
+                    rgba(248,248,248,0.0) 84%, rgba(248,248,248,0.50) 100%);
+}
+
+/* ── Top Status Bar ─────────────────────────────────── */
+.top-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 79px;
+  background: var(--bg-white);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 49px;
+  z-index: 30;
+}
+
+.top-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.top-bar-left .time {
+  font-size: 21px;
+  font-weight: 400;
+  line-height: 30px;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.top-bar-left .weather {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.top-bar-left .weather img {
+  width: 24px;
+  height: 24px;
+}
+
+.top-bar-left .weather span {
+  font-size: 21px;
+  font-weight: 400;
+  line-height: 30px;
+  color: var(--text-primary);
+}
+
+.top-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.top-bar-right img {
+  width: 24px;
+  height: 24px;
+}
+
+.top-bar-right .battery-text {
+  font-size: 21px;
+  font-weight: 400;
+  line-height: 30px;
+  color: var(--text-primary);
+}
+
+/* ── Main Content Area ──────────────────────────────── */
+.main-content {
+  position: absolute;
+  top: 79px;
+  left: 0;
+  right: 0;
+  bottom: 121px;
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+}
+
+/* ── Status pill (top-left driving status / alert) ──── */
+/* Glassy blur variant — Figma 311:7554. Sits over the map so it stays legible
+   on any underlying color via backdrop-blur + 85% white fill. */
+.status-pill {
+  position: absolute;
+  left: 54px;
+  top: 33px;
+  display: inline-flex;
+  align-items: center;
+  gap: 11px;
+  padding: 15px 29px;
+  border-radius: 9999px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0px 4px 14px rgba(0, 0, 0, 0.08);
+  font-family: 'Pretendard Variable', 'Pretendard', sans-serif;
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 24px;
+  letter-spacing: -0.48px;
+  color: #131417;
+  white-space: nowrap;
+  z-index: 11;
+}
+
+.status-pill-dot {
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  /* Dot color + halo are driven by the `--dot` custom property set inline per
+     status (🟢/🔴/🟠/🟡 from sequence.md). The fallback lives inside var() so
+     the parent's inline value is never shadowed. color-mix derives the
+     translucent ring from that single color. */
+  background: var(--dot, #21c46a);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--dot, #21c46a) 22%, transparent);
+  animation: status-dot-breath 2.4s ease-in-out infinite;
+}
+
+@keyframes status-dot-breath {
+  0%, 100% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--dot, #21c46a) 22%, transparent);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 9px color-mix(in srgb, var(--dot, #21c46a) 10%, transparent);
+    transform: scale(1.12);
+  }
+}
+
+/* Warning state — pill background/text stay identical to the Figma normal
+   variant (286:4588). The dot keeps its per-status `--dot` color; warning only
+   speeds up the pulse with a larger ring so it reads as more urgent. */
+.status-pill.warning .status-pill-dot {
+  animation: status-dot-breath-warning 1.6s ease-in-out infinite;
+}
+
+@keyframes status-dot-breath-warning {
+  0%, 100% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--dot, #ef7a3a) 22%, transparent);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 11px color-mix(in srgb, var(--dot, #ef7a3a) 8%, transparent);
+    transform: scale(1.18);
+  }
+}
+
+/* ── Hero Title (idle greeting + per-phase judgment) ── */
+.hero-title {
+  position: absolute;
+  left: 54px;
+  top: 131px;
+  right: 54px;
+  z-index: 10;
+}
+
+.hero-title p {
+  font-size: 70px;
+  font-weight: 500;
+  line-height: 1.28;
+  letter-spacing: -2.8px;
+  color: #5c668d;
+  font-family: 'Pretendard Variable', 'Pretendard', sans-serif;
+  white-space: nowrap;
+  margin: 0;
+}
+
+/* Typed-out judgment line — single caret on whichever line is being typed. */
+.judgment-line {
+  position: relative;
+  display: inline-block;
+  min-height: 1.28em;
+}
+
+/* Bold emphasis inside a judgment line. Matches Figma 286:2120 — same size
+   and color, just Pretendard Bold instead of Medium so key action/figure
+   phrases pop without breaking the typewriter flow. */
+.judgment-strong {
+  font-weight: 700;
+}
+
+.judgment-line.typing::after {
+  content: '';
+  display: inline-block;
+  width: 3px;
+  height: 0.92em;
+  margin-left: 6px;
+  background: #5c668d;
+  vertical-align: -0.12em;
+  animation: judgment-caret 0.9s steps(1) infinite;
+}
+
+@keyframes judgment-caret {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+/* ── Suggestion section (below the search bar) ──────── */
+.suggestion-section {
+  position: absolute;
+  left: 54px;
+  right: 54px;
+  top: 610px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  z-index: 10;
+}
+
+.suggestion-section-title {
+  font-family: 'Pretendard Variable', 'Pretendard', sans-serif;
+  font-size: 36px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: -1.44px;
+  color: #525252;
+  margin: 0;
+}
+
+.suggestion-chips {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.suggestion-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 23.5px 47px;
+  border-radius: 441px;
+  border: 1.5px solid rgba(0, 0, 0, 0.08);
+  background: linear-gradient(87deg, #ffffff 5%, #edeef2 95%);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.suggestion-chip:hover {
+  border-color: rgba(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+}
+
+.suggestion-chip:active {
+  transform: scale(0.97);
+}
+
+.suggestion-chip span {
+  font-size: 34px;
+  font-weight: 500;
+  line-height: 1.6;
+  letter-spacing: -0.68px;
+  color: #5c668d;
+  font-family: 'Pretendard Variable', 'Pretendard', sans-serif;
+}
+
+/* ── Voice search bar (Figma 311:7554) ──────────────── */
+/* Voice-only: no typing. Bottom-aligned just above the GNB. */
+.voice-input-area {
+  position: absolute;
+  /* Stretch to the parent panel instead of a fixed 1573px width — the panel
+     flexes with the layout, so a hard width pushed the bar off-screen left.
+     Inset insets keep it centered and padded within the panel. */
+  left: 24px;
+  right: 24px;
+  bottom: 90px;
+  height: 112px;
+  z-index: 10;
+  cursor: pointer;
+  /* 2026-06-25: 검색창(VoiceBar) 전체 불투명도 80% — 배경 맵이 은은히 비치도록. */
+  opacity: 0.8;
+}
+
+.voice-input-bg {
+  position: absolute;
+  inset: 0;
+  background: #ffffff;
+  border-radius: 300px;
+  border: 1px solid #edeef2;
+  box-shadow: 0px 4px 2px rgba(0, 0, 0, 0.1);
+}
+
+.voice-input-content {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding: 0 38px;
+  gap: 24px;
+}
+
+.voice-btn {
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+  cursor: pointer;
+  border: none;
+  /* Dark charcoal circle with a white glyph — matches the trailing search
+     button and the GNB menu button so all three read as the same control
+     family. Color sampled from the Figma button asset (Figma 311:7554). */
+  background: #343434;
+  border-radius: 50%;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s ease, background 0.2s ease;
+  position: relative;
+}
+
+.voice-btn:hover {
+  background: #454545;
+  transform: scale(1.05);
+}
+
+.voice-btn:active {
+  transform: scale(0.95);
+}
+
+.voice-btn img {
+  width: 100%;
+  height: 100%;
+}
+
+.voice-btn.listening {
+  animation: voice-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes voice-pulse {
+
+  0%,
+  100% {
+    transform: scale(1);
+  }
+
+  50% {
+    transform: scale(1.08);
+  }
+}
+
+.voice-btn.listening::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 2px solid rgba(0, 122, 255, 0.3);
+  animation: voice-ring 1.5s ease-in-out infinite;
+}
+
+@keyframes voice-ring {
+
+  0%,
+  100% {
+    opacity: 0.3;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.7;
+    transform: scale(1.1);
+  }
+}
+
+.voice-text-input {
+  flex: 1;
+  font-size: 32px;
+  font-weight: 400;
+  line-height: 1.6;
+  letter-spacing: -0.64px;
+  color: #131417;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: 'Pretendard Variable', 'Pretendard', sans-serif;
+  /* Voice-only mode keeps the field non-interactive; styled like a label. */
+  pointer-events: none;
+}
+
+.voice-text-input::placeholder {
+  color: #c3c3c3;
+}
+
+/* Static placeholder text used when there's no live transcription yet —
+   imitates the input look but is a plain span (no typing). */
+.voice-wakeword-hint {
+  flex: 1;
+  font-size: 32px;
+  font-weight: 400;
+  line-height: 1.6;
+  letter-spacing: -0.64px;
+  color: #c3c3c3;
+  font-family: 'Pretendard Variable', 'Pretendard', sans-serif;
+  user-select: none;
+}
+
+/* Trailing search button (Figma 311:7554) — dark charcoal pill containing a
+   white magnifier glyph, matching the leading mic dimensions. */
+.voice-search-icon {
+  width: 72px;
+  height: 72px;
+  flex-shrink: 0;
+  border: none;
+  background: #343434;
+  border-radius: 50%;
+  padding: 0;
+  cursor: pointer;
+  transition: transform 0.2s ease, background 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.voice-search-icon:hover {
+  background: #454545;
+}
+
+.voice-search-icon:active {
+  transform: scale(0.94);
+}
+
+.voice-send-btn {
+  width: 77px;
+  height: 70px;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  opacity: 0.5;
+  transition: all 0.2s ease;
+}
+
+.voice-send-btn:hover {
+  opacity: 0.8;
+}
+
+.voice-send-btn:active {
+  transform: scale(0.9);
+}
+
+.voice-listening-text {
+  font-size: 38px;
+  font-weight: 500;
+  line-height: 1.6;
+  letter-spacing: -3.65px;
+  color: #007AFF;
+  font-family: 'Pretendard Variable', 'Pretendard', sans-serif;
+}
+
+/* ── Bottom App Bar ─────────────────────────────────── */
+.bottom-bar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 121px;
+  background: linear-gradient(90deg, #ffffff 0%, #edeef2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 49px;
+  z-index: 30;
+}
+
+.bottom-left {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.bottom-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 41px;
+  text-align: center;
+}
+
+/* GNB center — 도착 예정 (N 분 뒤) + 현재 속도 (N km/h). Figma 311:7556. */
+.gnb-eta-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: 'Pretendard Variable', 'Pretendard', sans-serif;
+  min-width: 142px;
+  line-height: 1.4;
+}
+
+.gnb-eta-label {
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.96px;
+  color: #99a1af;
+}
+
+.gnb-eta-value {
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: -0.72px;
+  color: #414141;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Inline unit appended to the big number (e.g. " 분 뒤", " km/h"). Same row
+   as the big number — keeps the column visually 2 rows: label + value. */
+.gnb-eta-unit {
+  font-size: 24px;
+  font-weight: 400;
+  letter-spacing: -0.96px;
+}
+
+.bottom-right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+/* System-wide volume slider — always visible in the bottom bar */
+.volume-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 4px;
+}
+
+.volume-icon-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 12px;
+  transition: color 0.2s;
+}
+
+.volume-icon-btn:hover {
+  color: var(--text-primary);
+}
+
+.volume-bar {
+  width: 160px;          /* fixed reveal width; wrapper clips it when collapsed */
+  height: 8px;
+  background: rgba(140, 144, 168, 0.28);
+  border-radius: 999px;
+  position: relative;
+  cursor: pointer;
+}
+
+.volume-fill {
+  height: 100%;
+  background: #2d7cf1;
+  border-radius: 999px;
+  transition: width 0.15s ease;
+  pointer-events: none;
+}
+
+/* ── Bottom Bar Buttons ─────────────────────────────── */
+.btn-home {
+  width: 73px;
+  height: 73px;
+  border-radius: 21px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.15s ease;
+}
+
+.btn-home:active {
+  transform: scale(0.92);
+}
+
+.btn-home img {
+  width: 36px;
+  height: 36px;
+}
+
+.btn-chevron {
+  width: 55px;
+  height: 55px;
+  border-radius: 21px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.15s ease;
+}
+
+.btn-chevron:active {
+  transform: scale(0.92);
+}
+
+.btn-chevron img {
+  width: 30px;
+  height: 30px;
+}
+
+.climate-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 12px;
+}
+
+.climate-temp {
+  font-size: 36px;
+  font-weight: 600;
+  line-height: 49px;
+  color: var(--text-muted);
+  transition: color 0.3s;
+  font-family: 'Pretendard', sans-serif;
+}
+
+.climate-temp.cool {
+  color: #4A90D9;
+}
+
+.climate-temp.heat {
+  color: #E85D5D;
+}
+
+.climate-mode {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: opacity 0.2s;
+}
+
+.climate-mode:hover {
+  opacity: 0.7;
+}
+
+.climate-mode img {
+  width: 18px;
+  height: 18px;
+  opacity: 0.6;
+}
+
+.climate-mode span {
+  font-size: 18px;
+  line-height: 24px;
+  color: var(--text-secondary);
+  transition: color 0.3s;
+}
+
+.climate-mode span.cool {
+  color: #4A90D9;
+}
+
+.climate-mode span.heat {
+  color: #E85D5D;
+}
+
+.fan-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px;
+}
+
+.fan-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.fan-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  transition: background 0.3s;
+}
+
+.btn-seat {
+  width: 67px;
+  height: 67px;
+  border-radius: 21px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.15s ease;
+}
+
+.btn-seat:active {
+  transform: scale(0.92);
+}
+
+.btn-seat img {
+  width: 30px;
+  height: 30px;
+}
+
+/* ── App Icon Buttons (Circle) ──────────────────────── */
+.app-icon-btn {
+  width: 73px;
+  height: 73px;
+  border: 1px solid var(--divider-tertiary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  cursor: pointer;
+  padding: 0;
+  filter: drop-shadow(0px 6px 12px rgba(0, 0, 0, 0.08));
+  transition: all 0.2s ease;
+}
+
+.app-icon-btn:hover {
+  background: var(--bg-white);
+  transform: translateY(-1px);
+}
+
+.app-icon-btn:active {
+  transform: scale(0.93);
+}
+
+.app-icon-btn.active {
+  background: var(--bg-white);
+}
+
+.app-icon-btn img {
+  width: 30px;
+  height: 30px;
+}
+
+/* ── Menu Button ────────────────────────────────────── */
+/* Sized to match .app-icon-btn (73px circle) but with the Figma's darker
+   surface color so the menu reads as the trailing affordance in the row. */
+.btn-menu {
+  width: 73px;
+  height: 73px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--divider-tertiary);
+  background: #a0a0a5;
+  cursor: pointer;
+  padding: 0;
+  filter: drop-shadow(0px 6px 12px rgba(0, 0, 0, 0.08));
+  transition: transform 0.15s ease, background 0.2s ease;
+}
+
+.btn-menu:hover {
+  background: #8e8e94;
+}
+
+.btn-menu:active {
+  transform: scale(0.92);
+}
+
+.btn-menu img {
+  width: 30px;
+  height: 30px;
+  filter: brightness(0) invert(1);   /* render the menu glyph as white */
+}
+
+/* ── Chat Mode (when conversation active) ───────────── */
+.chat-layout {
+  position: absolute;
+  top: 104px;
+  left: 49px;
+  right: 51px;
+  height: 828px;
+  display: flex;
+  gap: 11px;
+  z-index: 10;
+}
+
+.panel-chat {
+  flex: 1;
+  background: white;
+  border-radius: 24px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: margin-left 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.panel-app {
+  width: 482px;
+  height: 100%;
+  background: #d9d9d9;
+  border-radius: 24px;
+  flex-shrink: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  /* Top padding clears the absolutely-positioned StatusPill (top:33px, ~54px
+     tall → ~87px) so the first chat bubble never slides under the chip.
+     2026-06-25: was 40px, raised to 120px to fix the pill↔message overlap. */
+  padding: 120px 60px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.chat-messages::-webkit-scrollbar {
+  display: none;
+}
+
+.message-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 17px;
+}
+
+.message-row.user {
+  flex-direction: row-reverse;
+}
+
+.message-time {
+  font-size: 23px;
+  font-weight: 400;
+  line-height: 1.6;
+  color: #a0a0a5;
+  letter-spacing: -0.46px;
+  font-family: 'Pretendard Variable', 'Pretendard', sans-serif;
+  margin-bottom: 10px;
+}
+
+.message-bubble {
+  max-width: 590px;
+  padding: 20px 40px;
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: -1.12px;
+  border-radius: 20px;
+  font-family: 'Pretendard Variable', 'Pretendard', sans-serif;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  text-align: left;
+}
+
+.message-bubble.ai {
+  background: #edeef2;
+  color: black;
+}
+
+.message-bubble.user {
+  background: #f0f4fd;
+  color: black;
+}
+
+/* ── Chat Input Bar ─────────────────────────────────── */
+.chat-input-bar {
+  padding: 30px 60px;
+  flex-shrink: 0;
+  background: linear-gradient(to top, rgba(255, 255, 255, 1) 60%, rgba(255, 255, 255, 0));
+}
+
+.chat-input-inner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: white;
+  border-radius: 300px;
+  padding: 16px 32px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0px 8px 30px rgba(0, 0, 0, 0.04);
+}
+
+.chat-mic-btn {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  padding: 0;
+}
+
+.chat-mic-btn.idle {
+  background: #007AFF;
+  box-shadow: 0px 4px 12px rgba(0, 122, 255, 0.35);
+}
+
+.chat-mic-btn.active {
+  background: #FF3B30;
+  box-shadow: 0 0 0 8px rgba(255, 59, 48, 0.14), 0 4px 12px rgba(255, 59, 48, 0.4);
+}
+
+.chat-mic-btn:active {
+  transform: scale(0.88);
+}
+
+.chat-divider {
+  width: 1.5px;
+  height: 34px;
+  background: rgba(19, 20, 23, 0.09);
+  flex-shrink: 0;
+}
+
+.chat-text-input {
+  flex: 1;
+  background: transparent;
+  font-size: 38px;
+  color: var(--text-primary);
+  border: none;
+  outline: none;
+  letter-spacing: -2px;
+  font-family: 'Pretendard Variable', 'Pretendard', sans-serif;
+}
+
+.chat-text-input::placeholder {
+  color: #5c668d;
+}
+
+.chat-send-btn {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+  padding: 0;
+  opacity: 0.6;
+}
+
+.chat-send-btn:hover {
+  opacity: 1;
+}
+
+.chat-send-btn:active {
+  transform: scale(0.88);
+}
+
+/* ── AI Orb ─────────────────────────────────────────── */
+.ai-orb {
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: radial-gradient(circle at 38% 30%, #f0f8ff 0%, #b8daf5 25%, #6ab0e8 55%, #3580c9 80%, #1a5fa8 100%);
+}
+
+.ai-orb.sm {
+  width: 42px;
+  height: 42px;
+  box-shadow: 0 5px 21px rgba(91, 163, 217, 0.32);
+}
+
+.ai-orb.pulse {
+  animation: orb-pulse 3.5s ease-in-out infinite;
+}
+
+@keyframes orb-pulse {
+
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+}
+
+/* ── AI Option Card (204:617) ───────────────────────── */
+.ai-option-card {
+  width: 757px;
+  background: linear-gradient(90deg, #ffffff 0%, #edeef2 100%);
+  border: 1px solid rgba(19, 20, 23, 0.1);
+  border-radius: 32px;
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  box-shadow: 0px 6px 12px rgba(0, 0, 0, 0.08);
+}
+
+.ai-option-title {
+  font-size: 42px;
+  font-weight: 500;
+  line-height: 1.6;
+  letter-spacing: -3px;
+  color: black;
+  text-align: center;
+  font-family: 'Pretendard Variable', 'Pretendard', sans-serif;
+}
+
+.ai-option-actions {
+  display: flex;
+  gap: 27px;
+  width: 100%;
+}
+
+.ai-option-btn {
+  flex: 1;
+  padding: 16px 0;
+  border-radius: 20px;
+  background: #eceaea;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  font-size: 39px;
+  font-weight: 500;
+  line-height: 1.6;
+  letter-spacing: -3px;
+  color: #131417;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: 'Pretendard Variable', 'Pretendard', sans-serif;
+}
+
+.ai-option-btn:hover {
+  background: #e2e2e2;
+}
+
+.ai-option-btn:active {
+  transform: scale(0.98);
+}
+
+.ai-option-btn.selected {
+  background: #4488ff;
+  color: white;
+  border-color: #4488ff;
+}
+
+/* ── Typing Dots ────────────────────────────────────── */
+.typing-dots {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  height: 24px;
+}
+
+.typing-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #4488ff;
+  animation: dot-bounce 0.6s ease-in-out infinite;
+}
+
+.typing-dot:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.typing-dot:nth-child(3) {
+  background: #a0a0a5;
+  animation-delay: 0.3s;
+}
+
+@keyframes dot-bounce {
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-5px);
+  }
+}
+
+/* ── Listening Wave ─────────────────────────────────── */
+.listening-wave {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 28px;
+}
+
+.wave-bar {
+  width: 4px;
+  border-radius: 9999px;
+  background: #007AFF;
+  height: 28px;
+  animation: wave-scale 0.5s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.wave-bar:nth-child(1) {
+  animation-duration: 0.50s;
+}
+
+.wave-bar:nth-child(2) {
+  animation-duration: 0.55s;
+  animation-delay: 0.06s;
+}
+
+.wave-bar:nth-child(3) {
+  animation-duration: 0.48s;
+  animation-delay: 0.12s;
+}
+
+.wave-bar:nth-child(4) {
+  animation-duration: 0.60s;
+  animation-delay: 0.18s;
+}
+
+.wave-bar:nth-child(5) {
+  animation-duration: 0.45s;
+  animation-delay: 0.24s;
+}
+
+.wave-bar:nth-child(6) {
+  animation-duration: 0.53s;
+  animation-delay: 0.30s;
+}
+
+.wave-bar:nth-child(7) {
+  animation-duration: 0.58s;
+  animation-delay: 0.36s;
+}
+
+.wave-bar:nth-child(8) {
+  animation-duration: 0.47s;
+  animation-delay: 0.42s;
+}
+
+@keyframes wave-scale {
+
+  0%,
+  100% {
+    transform: scaleY(0.4);
+  }
+
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+/* ── Utility ────────────────────────────────────────── */
+.hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── AI Roundabout Scenario Card ────────────────────── */
+.roundabout-card {
+  width: 590px;
+  background: #edeef2;
+  border-radius: 20px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  margin-top: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.roundabout-card-title {
+  padding: 20px 40px;
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: -1.12px;
+  color: var(--text-primary);
+  text-align: left;
+  font-family: 'Pretendard Variable', 'Pretendard', sans-serif;
+  /* 카드 본문은 어절(공백) 단위로 줄바꿈해 단어가 쪼개지지 않게 */
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+
+.roundabout-card-image {
+  width: 100%;
+  height: 280px;
+  background: #d9d9d9;
+  position: relative;
+  overflow: hidden;
+}
+
+.roundabout-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.roundabout-card-btn {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  background: var(--bg-white);
+  border: none;
+  border-radius: 100px;
+  padding: 12px 24px;
+  font-size: 24px;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s;
+}
+
+.roundabout-card-btn:hover {
+  transform: scale(1.02);
+}
+
+/* ── ControlPanel temperature slider — blue→red gradient track w/ white knob ── */
+.ctrl-temp-slider {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 5.5px;
+  background: linear-gradient(to right, rgba(69,142,255,0.9), rgba(255,83,74,0.9));
+  border-radius: 100px;
+  outline: none;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+}
+
+.ctrl-temp-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  cursor: grab;
+  border: none;
+  transition: transform 0.15s ease;
+}
+
+.ctrl-temp-slider::-moz-range-thumb {
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  border: none;
+  cursor: grab;
+  transition: transform 0.15s ease;
+}
+
+.ctrl-temp-slider:active::-webkit-slider-thumb {
+  cursor: grabbing;
+  transform: scale(1.08);
+}
+.ctrl-temp-slider:active::-moz-range-thumb {
+  cursor: grabbing;
+  transform: scale(1.08);
+}
+
+/* ── Restored CSS for AI Option Card & Confirmation ── */
+.message-bubble.confirmation {
+  background: linear-gradient(-90deg, #77a9e8 0%, #2d7cf1 100%);
+  color: white;
+  border: none;
+}
+
+.ai-option-card {
+  width: 680px;
+  background: #f7f8fa;
+  border-radius: 32px;
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+  border: 1px solid rgba(0,0,0,0.05);
+  margin-top: 10px;
+}
+
+.ai-option-title {
+  font-size: 38px;
+  font-weight: 500;
+  text-align: center;
+  color: var(--text-primary);
+  letter-spacing: -2px;
+  word-break: keep-all;
+}
+
+.ai-option-actions {
+  display: flex;
+  gap: 16px;
+}
+
+.ai-option-btn {
+  flex: 1;
+  padding: 24px;
+  border-radius: 20px;
+  background: #edeef2;
+  border: none;
+  font-size: 32px;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.3s;
+  letter-spacing: -1.5px;
+}
+
+.ai-option-btn:hover:not(.dimmed) {
+  background: #e2e4e9;
+}
+
+.ai-option-btn.selected {
+  background: #4A90E2;
+  color: white;
+  box-shadow: 0 4px 12px rgba(74, 144, 226, 0.3);
+}
+
+.ai-option-btn.dimmed {
+  opacity: 0.4;
+  cursor: default;
+}

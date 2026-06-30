@@ -1,0 +1,23 @@
+# --- Secrets (NEVER commit real API keys) ---
+.env
+.env.local
+.env.*.local
+*.key
+
+# --- Node / web HMI ---
+node_modules/
+dist/
+*.log
+npm-debug.log*
+
+# --- Python / CARLA ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# Note: data/ raw dry-run outputs (*.csv, *.jsonl) ARE meant to be committed.

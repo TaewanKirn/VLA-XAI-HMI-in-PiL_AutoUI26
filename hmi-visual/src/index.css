@@ -1,0 +1,793 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 주행 판단 과정 패널 등 scrollbar 가리기 — Firefox/IE/Edge/Chromium/Safari 모두 커버 */
+.hide-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+/* ── Design Tokens ──────────────────────────────────── */
+:root {
+  --bg-primary: #f7f8fa;
+  --bg-white: #ffffff;
+  --text-primary: #131417;
+  --text-secondary: #99a1af;
+  --text-muted: #a0a0a5;
+  --divider-tertiary: rgba(19, 20, 23, 0.2);
+  --divider-light: rgba(19, 20, 23, 0.08);
+  --shadow-level1-y: 6px;
+  --shadow-level1-blur: 24px;
+  --shadow-level1: 0px 6px 12px rgba(0, 0, 0, 0.08);
+  font-family: 'Pretendard Variable', 'Pretendard', system-ui, -apple-system, sans-serif;
+}
+
+/* ── Global Reset ───────────────────────────────────── */
+* {
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body {
+  margin: 0;
+}
+
+body {
+  min-width: 320px;
+  background-color: #000;
+  display: block;
+}
+
+#root {
+  position: relative;
+  width: 100%;
+  min-height: 100vh;
+}
+
+/* ── HMI viewport: fits the fixed 1920×1080 screen to the display ──
+   Letterboxes (black bars) on non-16:9 displays, never scrolls. */
+.hmi-viewport {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  overflow: hidden;
+}
+
+/* ── Screen Container ─────────────────────────────────
+   1920×1080 라는 고정 디자인 캔버스를 어떤 디스플레이에서도 화면에 맞게
+   스케일해서 보여준다. CSS만으로 처리하므로 resize 리스너 불필요:
+   - min(100vw/1920px, 100vh/1080px) → 가로/세로 둘 중 작은 비율로 스케일
+   - 결과: 일반 브라우저 창에서는 가로폭에 꽉 차고, F11 풀스크린에서는
+           1920×1080 디자인 전체가 화면 안에 letterbox로 들어옴
+   - .hmi-viewport(부모)가 flex center + overflow:hidden 이라 transform-origin
+     center 기준 스케일이 자연스럽게 중앙 정렬됨 */
+.screen {
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+  flex-shrink: 0;
+  transform-origin: center center;
+  transform: scale(min(calc(100vw / 1920px), calc(100vh / 1080px)));
+  overflow: hidden;
+  /* 배경은 테슬라풍 라이브 맵 iframe(.drive-bg-iframe)이 담당.
+     ⚠️ .screen 을 화이트로 받친다 — iframe 이 opacity 0.30 이라, 뒤가 검정(#000 viewport)이면
+     불투명이 낮을수록 어두워진다. 화이트로 받쳐야 "투명도↑ = 밝아짐"(BG=화이트)이 성립. */
+  background: #ffffff;
+  font-family: 'Pretendard Variable', 'Pretendard', sans-serif;
+}
+
+/* ── 테슬라풍 라이브 주행 맵: 풀블리드 고정 배경 (z 최하·클릭통과) ── */
+.drive-bg-iframe {
+  position: absolute;
+  inset: 0;
+  width: 1920px;
+  height: 1080px;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: block;
+  z-index: 0;            /* 모든 UI(top-bar z30, 패널 z10+, bloom z5) 아래 */
+  pointer-events: none;  /* HMI 클릭이 맵으로 새지 않게 */
+  /* #1 라이트맵 → iframe 로드 전/실패 시에도 밝은 배경 톤으로 graceful. */
+  background: var(--bg-primary, #f7f8fa);
+  /* #2 맵뷰어 opacity ~0.30 — 맵은 은은히 비치되 위 텍스트 가독성 우선.
+     배경(.screen)이 밝은 톤이라 0.30 으로도 도로/경로/내 차가 충분히 식별됨. */
+  opacity: 0.30;
+}
+
+/* #8 내비 패널 열림 시: 메인 영역엔 맵을 띄우지 않고 배경색으로 표시.
+   .screen 에 .nav-panel-open 토글 → 풀블리드 맵 iframe 숨김(배경색만 노출). */
+.screen.nav-panel-open .drive-bg-iframe {
+  display: none;
+}
+.screen.nav-panel-open {
+  /* 맵을 숨긴 메인 영역을 라이트 배경색으로 채움. */
+  background: var(--bg-primary, #f7f8fa);
+}
+
+/* 맵 위 은은한 어둠 그라데이션 — HMI 텍스트 가독성 확보(테슬라 상단 그라데이션과 유사).
+   v2: scrim 을 더 약화해 맵(도로·내 차·경로)이 화면 중앙/주변에 은은히 비치게 한다.
+   텍스트가 몰리는 화면 정중앙(XAI hero 영역) 뒤에만 옅은 그라데이션을 남기고
+   상·하단은 살짝만 떨어뜨려 "차가 맵 위를 달린다"는 느낌을 유지. */
+.drive-bg-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;            /* 맵 위, UI 아래 */
+  pointer-events: none;
+  /* #1 라이트맵 전환: 어두운 scrim → 밝은(흰) 워시로 변경. 맵이 이미
+     30% opacity 로 옅어 텍스트 가독성은 충분하므로 중앙엔 아주 옅은
+     흰 워시만 두고, 상·하단은 GNB/상태바 경계로 부드럽게 흰 쪽으로 페이드. */
+  background:
+    radial-gradient(120% 65% at 50% 46%, rgba(247,248,250,0.30) 0%, rgba(247,248,250,0.0) 60%),
+    linear-gradient(180deg, rgba(247,248,250,0.45) 0%, rgba(247,248,250,0.0) 16%,
+                    rgba(247,248,250,0.0) 84%, rgba(247,248,250,0.45) 100%);
+}
+
+/* ── Top Status Bar ─────────────────────────────────── */
+.top-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 79px;
+  background: var(--bg-white);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 49px;
+  z-index: 30;
+}
+
+.top-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.top-bar-left .time {
+  font-size: 21px;
+  font-weight: 400;
+  line-height: 30px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.top-bar-left .weather {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.top-bar-left .weather img {
+  width: 24px;
+  height: 24px;
+}
+
+.top-bar-left .weather span {
+  font-size: 21px;
+  font-weight: 400;
+  line-height: 30px;
+  color: var(--text-primary);
+}
+
+.top-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.top-bar-right img {
+  width: 24px;
+  height: 24px;
+}
+
+.top-bar-right .battery-text {
+  font-size: 21px;
+  font-weight: 400;
+  line-height: 30px;
+  color: var(--text-primary);
+}
+
+/* ── Bottom App Bar ─────────────────────────────────── */
+.bottom-bar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 121px;
+  background: linear-gradient(90deg, #ffffff 0%, #edeef2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 49px;
+  z-index: 30;
+}
+
+.bottom-left {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.bottom-center {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.bottom-right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+/* ── GNB center: ETA + 현재 속도 (Figma 304:1621) ──
+   Figma 원본 스펙:
+   - 라벨 24px Medium leading 1.4 tracking -0.96
+   - 숫자 36px Bold leading 1.4 tracking -0.72
+   - 단위 24px Regular leading 1.4
+   라벨/값 사이 12px 수직 여백 + 숫자/단위 사이 10px 수평 여백을 명시적으로
+   추가해 압착돼 보이는 문제 해소. */
+.gnb-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 41px;
+  color: #414141;
+  font-family: 'Pretendard Variable', 'Pretendard', sans-serif;
+}
+
+/* Figma 304:1125 — 라벨/값 stack 은 자연 line-height 만으로 간격 형성
+   (Figma 원본에 explicit gap 없음). 값 컨테이너만 h=39 justify-center 로
+   숫자/단위가 수직 중앙. 숫자↔단위는 10px gap. */
+.gnb-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 142px;
+}
+
+.gnb-stat-label {
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: -0.96px;
+  color: #414141;
+}
+
+.gnb-stat-value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  height: 39px;
+  line-height: 1.4;
+  color: #414141;
+  font-variant-numeric: tabular-nums;
+}
+
+.gnb-stat-value .num {
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: -0.72px;
+}
+
+.gnb-stat-value .unit {
+  font-size: 24px;
+  font-weight: 400;
+  letter-spacing: -0.48px;
+}
+
+/* System-wide volume slider */
+.volume-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 4px;
+}
+
+.volume-icon-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 12px;
+  transition: color 0.2s;
+}
+
+.volume-icon-btn:hover {
+  color: var(--text-primary);
+}
+
+.volume-bar {
+  width: 160px;
+  height: 8px;
+  background: rgba(140, 144, 168, 0.28);
+  border-radius: 999px;
+  position: relative;
+  cursor: pointer;
+}
+
+.volume-fill {
+  height: 100%;
+  background: #2d7cf1;
+  border-radius: 999px;
+  transition: width 0.15s ease;
+  pointer-events: none;
+}
+
+/* ── Bottom Bar Buttons ─────────────────────────────── */
+.btn-home {
+  width: 73px;
+  height: 73px;
+  border-radius: 21px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.15s ease;
+}
+
+.btn-home:active {
+  transform: scale(0.92);
+}
+
+.btn-home img {
+  width: 36px;
+  height: 36px;
+}
+
+.btn-chevron {
+  width: 55px;
+  height: 55px;
+  border-radius: 21px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.15s ease;
+}
+
+.btn-chevron:active {
+  transform: scale(0.92);
+}
+
+.btn-chevron img {
+  width: 30px;
+  height: 30px;
+}
+
+.climate-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 12px;
+}
+
+.climate-temp {
+  font-size: 36px;
+  font-weight: 600;
+  line-height: 49px;
+  color: var(--text-muted);
+  transition: color 0.3s;
+  font-family: 'Pretendard', sans-serif;
+}
+
+.climate-temp.cool {
+  color: #4A90D9;
+}
+
+.climate-temp.heat {
+  color: #E85D5D;
+}
+
+.climate-mode {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: opacity 0.2s;
+}
+
+.climate-mode:hover {
+  opacity: 0.7;
+}
+
+.climate-mode img {
+  width: 18px;
+  height: 18px;
+  opacity: 0.6;
+}
+
+.climate-mode span {
+  font-size: 18px;
+  line-height: 24px;
+  color: var(--text-secondary);
+  transition: color 0.3s;
+}
+
+.climate-mode span.cool {
+  color: #4A90D9;
+}
+
+.climate-mode span.heat {
+  color: #E85D5D;
+}
+
+.fan-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 0 6px;
+}
+
+.fan-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.fan-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  transition: background 0.3s;
+}
+
+/* ── App Icon Buttons (Circle) ──────────────────────── */
+.app-icon-btn {
+  width: 73px;
+  height: 73px;
+  border: 1px solid var(--divider-tertiary);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  cursor: pointer;
+  padding: 0;
+  filter: drop-shadow(0px 6px 12px rgba(0, 0, 0, 0.08));
+  transition: all 0.2s ease;
+}
+
+.app-icon-btn:hover {
+  background: var(--bg-white);
+  transform: translateY(-1px);
+}
+
+.app-icon-btn:active {
+  transform: scale(0.93);
+}
+
+.app-icon-btn.active {
+  background: var(--bg-white);
+  box-shadow: inset 0px 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.app-icon-btn img {
+  width: 30px;
+  height: 30px;
+}
+
+/* ── System Menu Button (Figma 286:2795) ─────────────
+   햄버거 메뉴는 앱 아이콘과 동일한 73px 원형. 회색 배경(#a0a0a5)으로
+   "시스템/제어" 영역임을 시각적으로 구분. 다른 앱 버튼들은 흰/오프화이트
+   배경이라 한눈에 구별됨. */
+.btn-menu-system {
+  width: 73px;
+  height: 73px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--divider-tertiary);
+  background: #a0a0a5;
+  cursor: pointer;
+  padding: 0;
+  filter: drop-shadow(0px 6px 12px rgba(0, 0, 0, 0.08));
+  transition: transform 0.15s ease, background 0.2s ease;
+}
+
+.btn-menu-system:hover {
+  background: #8a8a8f;
+}
+
+.btn-menu-system:active {
+  transform: scale(0.93);
+}
+
+/* ── (legacy) .btn-menu — square menu chip, kept for back-compat ── */
+.btn-menu {
+  width: 51px;
+  height: 51px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--divider-light);
+  background: var(--bg-primary);
+  cursor: pointer;
+  padding: 0;
+  transition: transform 0.15s ease;
+}
+
+.btn-menu:active {
+  transform: scale(0.92);
+}
+
+.btn-menu img {
+  width: 24px;
+  height: 24px;
+}
+
+/* ── Unified Premium Design System ─────────────────── */
+.btn-primary {
+  height: 56px;
+  padding: 0 28px;
+  background: #2d7cf1;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 600;
+  border-radius: 16px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0px 6px 20px rgba(45, 124, 241, 0.25);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.btn-primary:hover {
+  background: #1a66d6;
+  transform: translateY(-1px);
+  box-shadow: 0px 8px 24px rgba(45, 124, 241, 0.35);
+}
+.btn-primary:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.btn-secondary {
+  height: 56px;
+  padding: 0 28px;
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(19, 20, 23, 0.08);
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 600;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0px 2px 8px rgba(0, 0, 0, 0.04);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(19, 20, 23, 0.15);
+  transform: translateY(-1px);
+}
+.btn-secondary:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.btn-window-ctrl {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(19, 20, 23, 0.08);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.btn-window-ctrl:hover {
+  background: #ffffff;
+  color: #2d7cf1;
+  transform: scale(1.05);
+  box-shadow: 0px 6px 16px rgba(0, 0, 0, 0.08);
+}
+.btn-window-ctrl:active {
+  transform: scale(0.95);
+}
+
+/* ── Unified Sidebar Tab ─────────────────────────── */
+.sidebar-tab {
+  display: flex;
+  align-items: center;
+  border-radius: 16px;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.sidebar-tab:hover {
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--text-primary);
+}
+.sidebar-tab.active {
+  background: #ffffff;
+  color: #2d7cf1;
+  font-weight: 600;
+  box-shadow: 0px 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+/* ── Unified Search Input Container ──────────────── */
+.search-container {
+  display: flex;
+  align-items: center;
+  height: 56px;
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(19, 20, 23, 0.08);
+  border-radius: 16px;
+  padding: 0 20px;
+  box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.04);
+  transition: all 0.2s;
+  opacity: 0.8; /* 2026-06-25 사용자 지시: 검색창 opacity 0.8 (음성 HMI와 통일) */
+}
+.search-container:focus-within {
+  border-color: #2d7cf1;
+  background: #ffffff;
+  box-shadow: 0px 4px 16px rgba(45, 124, 241, 0.1);
+}
+
+/* ── Unified List Items ───────────────────────────── */
+.list-item {
+  padding: 20px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(19, 20, 23, 0.03);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.list-item:hover {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(19, 20, 23, 0.08);
+  box-shadow: 0px 8px 24px rgba(0, 0, 0, 0.04);
+  transform: translateX(4px);
+}
+.list-item.selected {
+  background: #ffffff;
+  border-color: rgba(45, 124, 241, 0.3);
+  box-shadow: 0px 8px 24px rgba(45, 124, 241, 0.08);
+}
+
+/* ── ControlPanel temperature slider — blue→red gradient track w/ white knob ── */
+.ctrl-temp-slider {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 5.5px;
+  background: linear-gradient(to right, rgba(69,142,255,0.9), rgba(255,83,74,0.9));
+  border-radius: 100px;
+  outline: none;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+}
+
+.ctrl-temp-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(0, 0, 0, 0.04);
+  cursor: grab;
+  border: none;
+  transition: transform 0.15s ease;
+}
+
+.ctrl-temp-slider::-moz-range-thumb {
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  border: none;
+  cursor: grab;
+  transition: transform 0.15s ease;
+}
+
+.ctrl-temp-slider:active::-webkit-slider-thumb {
+  cursor: grabbing;
+  transform: scale(1.08);
+}
+.ctrl-temp-slider:active::-moz-range-thumb {
+  cursor: grabbing;
+  transform: scale(1.08);
+}
+
+/* ── Keyboard chat (searchbox → Gemini) ─────────────── */
+/* Same bubble styling as the main HMI prototype so this variant feels
+   identical. Bubbles sit in a centered column above the searchbox; the
+   user-side bubble right-aligns with a soft blue fill. */
+.message-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 17px;
+}
+
+.message-row.user {
+  flex-direction: row-reverse;
+}
+
+.message-bubble {
+  max-width: 720px;
+  padding: 20px 40px;
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: -1.12px;
+  border-radius: 20px;
+  font-family: 'Pretendard Variable', 'Pretendard', sans-serif;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+.message-bubble.ai {
+  background: #edeef2;
+  color: #131417;
+}
+
+.message-bubble.user {
+  background: #f0f4fd;
+  color: #131417;
+}
+
+.typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.typing-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #99a1af;
+  animation: typing-bounce 1.2s ease-in-out infinite;
+}
+
+.typing-dot:nth-child(2) { animation-delay: 0.15s; }
+.typing-dot:nth-child(3) { animation-delay: 0.30s; }
+
+@keyframes typing-bounce {
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+  30% { transform: translateY(-6px); opacity: 1; }
+}

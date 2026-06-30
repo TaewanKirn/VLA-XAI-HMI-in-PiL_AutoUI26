@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>HMI 테스트 클라이언트 — CARLA scenario_event 검증 (:8766)</title>
+<!--
+  목적: CARLA(websocket_sender :8766)가 보내는 scenario_event/world_metric 를 받아
+        SA-Level commentary 화면을 "이벤트마다 넘기는" 것 + hmi_interaction 송신(왕복)을
+        실제 React HMI(A안/B안) 구현 전에 검증하는 레퍼런스 테스트 클라이언트.
+  계약: hmi_carla_sync_logging_260531.md §2 · 화면 매핑: ScenarioSetting.md / C1_beat_event_map.md
+  사용: 브라우저로 열기. 같은 PC면 127.0.0.1, 태블릿이면 ws://<PC-LAN-IP>:8766 로 바꿔 연결.
+-->
+<style>
+  :root{ --bg:#0d1117; --card:#161b22; --line:#2a3140; --tx:#e6edf3; --mut:#8b949e; }
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--tx);
+    font-family:ui-sans-serif,system-ui,'Segoe UI',sans-serif}
+  .bar{display:flex;gap:8px;align-items:center;padding:8px 12px;background:#11161d;border-bottom:1px solid var(--line)}
+  .bar input{flex:1;max-width:320px;background:#0d1117;color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+  .bar button{background:#1f6feb;color:#fff;border:0;border-radius:6px;padding:6px 12px;cursor:pointer}
+  .dot{width:10px;height:10px;border-radius:50%;background:#d29922;display:inline-block}
+  .dot.ok{background:#2ea043}.dot.off{background:#6e7681}
+  .wrap{max-width:920px;margin:18px auto;padding:0 14px;display:grid;gap:14px}
+  .screen{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px 24px}
+  .status{display:flex;align-items:center;gap:10px;font-size:15px;font-weight:600;margin-bottom:14px}
+  .sdot{width:14px;height:14px;border-radius:50%}
+  .zin{font-size:26px;font-weight:700;line-height:1.35}
+  .zout{font-size:19px;color:var(--mut);margin-top:8px;line-height:1.4}
+  .meta{display:flex;gap:18px;flex-wrap:wrap;margin-top:16px;font-size:13px;color:var(--mut)}
+  .meta b{color:var(--tx)}
+  .row{display:flex;gap:10px;flex-wrap:wrap}
+  .row button{background:#21262d;color:var(--tx);border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer}
+  .row button:hover{border-color:#1f6feb}
+  .gauge{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:13px;color:var(--mut);font-variant-numeric:tabular-nums}
+  .log{background:#0b0f14;border:1px solid var(--line);border-radius:10px;padding:10px;height:170px;overflow:auto;
+    font:12px ui-monospace,Consolas,monospace;color:#9fb1c1;white-space:pre-wrap}
+  h3{margin:0 0 6px;font-size:13px;color:var(--mut);font-weight:600}
+</style>
+</head>
+<body>
+  <div class="bar">
+    <span class="dot off" id="dot"></span><span id="stat">미연결</span>
+    <input id="url" value="ws://127.0.0.1:8766" spellcheck="false">
+    <button id="go">연결</button>
+  </div>
+
+  <div class="wrap">
+    <!-- 메인 화면: 이벤트마다 여기를 넘긴다 -->
+    <div class="screen">
+      <div class="status"><span class="sdot" id="sdot" style="background:#2ea043"></span><span id="statusTx">🟢 정상 주행 중</span></div>
+      <div class="zin" id="zin">CARLA 연결 대기 중…</div>
+      <div class="zout" id="zout">scenario_event 를 받으면 이 화면이 단계별로 넘어갑니다.</div>
+      <div class="meta">
+        <span>시나리오 <b id="mScn">—</b></span>
+        <span>이벤트 <b id="mEv">—</b></span>
+        <span>권장 <b id="mRec">—</b> km/h</span>
+        <span>현재 <b id="mCur">—</b> km/h</span>
+        <span>복귀까지 <b id="mN">—</b> 초</span>
+        <span>t_sim <b id="mT">—</b></span>
+      </div>
+    </div>
+
+    <!-- hmi_interaction 송신(왕복 검증) -->
+    <div class="row">
+      <button data-act="request_detail" data-val="더 자세히">▸ 더 자세히 (request_detail)</button>
+      <button data-act="tap_cta" data-val="확인">▸ 확인 (tap_cta)</button>
+      <button data-act="select_option" data-val="신뢰">▸ 신뢰 (select_option)</button>
+    </div>
+
+    <div class="gauge" id="gauge">world_metric 대기… (speed / yaw_rate / brake / lane_offset)</div>
+
+    <div>
+      <h3>수신 이벤트 로그</h3>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+<script>
+// ── 이벤트 → 화면(commentary) 매핑 (ScenarioSetting.md / C1_beat_event_map.md) ──
+//   payload 의 동적수치는 {recommended_kmh}/{Nsec_to_recover} 로 치환.
+const SCREENS = {
+  // C1 roundabout
+  'junction_deadlock_start': {c:'#2ea043', s:'🟢 정상 주행 중',
+     zi:'출구 진입에 실패해 한 바퀴 더 회전합니다.', zo:'다음 진출 기회를 탐색합니다.'},
+  'to_inner': {c:'#2ea043', s:'🟢 정상 주행 중',
+     zi:'진출에 다시 실패해 또 한 바퀴 회전합니다.', zo:'진입 가능 구간을 재탐색합니다.'},
+  'abnormal_loop': {c:'#f85149', s:'🔴 오류가 감지되었습니다',
+     zi:'비정상적으로 여러 바퀴를 회전하고 있습니다.', zo:'정상 진출 범위를 초과했습니다.'},
+  'stuck_stop': {c:'#db6d28', s:'🟠 오류 원인을 파악 중',
+     zi:'출구의 주차 차량이 진입 각을 막고 있습니다.', zo:'앞 차량을 정차로 오판한 것이 원인입니다.'},
+  'force_merge': {c:'#d29922', s:'🟡 오류를 해결 중',
+     zi:'한 바퀴 돌아 목표 출구로 진출합니다.', zo:'약 {Nsec_to_recover}초 후 진출 예정입니다.'},
+  'exit_success': {c:'#2ea043', s:'🟢 정상 주행 중',
+     zi:'출구 탈출에 성공했습니다.', zo:'정상 주행을 재개합니다.'},
+  'cleared': {c:'#2ea043', s:'🟢 정상 주행 중',
+     zi:'정상 주행으로 복귀했습니다.', zo:'경로를 따라 주행합니다.'},
+  'junction_arrive': {c:'#2ea043', s:'🟢 정상 주행 중',
+     zi:'출구 진출을 시도합니다.', zo:'진입 각을 확보하는 중입니다.'},
+  // C2 aquaplaning (puddle_enter = 요동→감속 묶음)
+  'puddle_enter': {c:'#db6d28', s:'🟠 오류 원인을 파악 중',
+     zi:'노면의 물웅덩이를 감지하지 못해 수막현상이 발생했습니다.',
+     zo:'권장 {recommended_kmh}km/h로 감속합니다. 약 {Nsec_to_recover}초 후 정상 마찰로 복귀합니다.'},
+};
+const $=id=>document.getElementById(id);
+let ws=null;
+function log(m){ const t=new Date().toISOString().substr(11,12); $('log').textContent=`[${t}] ${m}\n`+$('log').textContent; }
+function sub(str,p){ return (str||'').replace(/\{(\w+)\}/g,(_,k)=>(p&&p[k]!=null)?p[k]:'N'); }
+
+function applyEvent(m){
+  const ev=m.event, sc=SCREENS[ev]; const p=m.payload||{};
+  $('mScn').textContent=m.scenario||'—'; $('mEv').textContent=ev||'—';
+  $('mRec').textContent=p.recommended_kmh!=null?p.recommended_kmh:'—';
+  $('mCur').textContent=p.current_kmh!=null?p.current_kmh:'—';
+  $('mN').textContent=p.Nsec_to_recover!=null?p.Nsec_to_recover:'—';
+  $('mT').textContent=m.t_sim!=null?m.t_sim:'—';
+  if(sc){
+    $('sdot').style.background=sc.c; $('statusTx').textContent=sc.s;
+    $('zin').textContent=sub(sc.zi,p); $('zout').textContent=sub(sc.zo,p);
+    log(`▶ 화면전환  ${m.scenario}/${ev}  ${sc.s}`);
+  } else {
+    $('zin').textContent=`(매핑 없는 이벤트: ${ev})`; $('zout').textContent=JSON.stringify(p);
+    log(`▶ 이벤트(미매핑) ${m.scenario}/${ev}`);
+  }
+}
+function applyMetric(m){
+  $('gauge').textContent =
+    `speed ${(m.speed_kmh??m.speed??0).toFixed?.(1)??m.speed_kmh} km/h · `+
+    `yaw_rate ${(m.yaw_rate??0)} · long_acc ${(m.long_accel??0)} · lat_acc ${(m.lat_accel??0)} · `+
+    `brake ${(m.brake??0)} · lane_off ${(m.lane_offset_m??0)} m`;
+}
+function connect(){
+  const url=$('url').value.trim();
+  if(ws){ ws.close(); ws=null; }
+  $('dot').className='dot'; $('stat').textContent='연결 중…';
+  try{ ws=new WebSocket(url); }catch(e){ $('stat').textContent='오류 '+e.message; return; }
+  ws.onopen =()=>{ $('dot').className='dot ok'; $('stat').textContent='연결됨 '+url; log('연결됨 '+url); };
+  ws.onclose=()=>{ $('dot').className='dot off'; $('stat').textContent='끊김 — 재연결하려면 [연결]'; ws=null; };
+  ws.onerror=()=>{ $('stat').textContent='오류 (서버/포트 8766 확인)'; };
+  ws.onmessage=ev=>{
+    let m; try{ m=JSON.parse(ev.data); }catch(e){ return; }
+    if(!m||typeof m!=='object') return;
+    if(m.type==='scenario_event') applyEvent(m);
+    else if(m.type==='world_metric') applyMetric(m);
+    // world_frame/motion 등은 무시
+  };
+}
+// hmi_interaction 송신(왕복 검증) — CARLA WS 서버가 t_bus·session_id 스탬프해 JSONL 로깅
+document.querySelectorAll('.row button').forEach(b=>b.onclick=()=>{
+  if(!ws||ws.readyState!==1){ log('⚠ 미연결 — 먼저 연결'); return; }
+  const msg={type:'hmi_interaction', modality:'visual', action:b.dataset.act,
+             value:b.dataset.val, client_ts:Date.now()};
+  ws.send(JSON.stringify(msg)); log('◀ 송신 hmi_interaction '+b.dataset.act+' = '+b.dataset.val);
+});
+$('go').onclick=connect;
+connect();  // 자동 연결 시도
+</script>
+</body>
+</html>
