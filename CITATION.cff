@@ -1,0 +1,70 @@
+cff-version: 1.2.0
+message: "If you use this software or its stimuli, please cite both the software and the paper below."
+title: "VLA-XAI-HMI-in-PiL: VLA-grounded situation-awareness explanation HMI on a Passenger-in-the-Loop CARLA + 6-DOF testbed"
+abstract: >-
+  Replication artifact for the AutoUI '26 Student Research Track paper on
+  explaining vehicle functional insufficiency (SOTIF FI/OI) to L5 passengers.
+  Includes the CARLA 0.9.15 + 6-DOF scenarios (C1 frustration / C2 anxiety),
+  6-DOF motion-cueing tuning, the scenarioQA six-metric tooling, the visual and
+  voice SA-explanation HMIs, and the SA explanation stimulus pool.
+type: software
+authors:
+  - given-names: Taewan
+    family-names: Kim
+    affiliation: "Hongik University"
+    orcid: "https://orcid.org/0009-0000-0033-0817"
+  - given-names: Eunchae
+    family-names: Song
+    affiliation: "Hongik University"
+    orcid: "https://orcid.org/0009-0005-3657-8538"
+  - given-names: Soeun
+    family-names: Park
+    affiliation: "Hongik University"
+    orcid: "https://orcid.org/0009-0003-0882-9657"
+  - given-names: Yoonseo
+    family-names: Cho
+    affiliation: "Hongik University"
+    orcid: "https://orcid.org/0009-0003-1220-7973"
+  - given-names: Chae Yeon
+    family-names: Kim
+    affiliation: "Hongik University"
+    orcid: "https://orcid.org/0009-0006-4207-4771"
+  - given-names: Dokshin
+    family-names: Lim
+    affiliation: "Hongik University"
+    orcid: "https://orcid.org/0000-0002-5146-1830"
+repository-code: "https://github.com/TaewanKirn/VLA-XAI-HMI-in-PiL_AutoUI26"
+license: MIT
+version: 1.0.0
+date-released: "2026-06-30"
+keywords:
+  - automotive user interface
+  - explainable AI
+  - situation awareness
+  - vision-language-action model
+  - SOTIF
+  - human-machine interface
+  - passenger-in-the-loop
+  - CARLA
+# After a Zenodo release, add the Concept DOI here, e.g.:
+# doi: "10.5281/zenodo.XXXXXXX"
+preferred-citation:
+  type: conference-paper
+  # TODO: replace with the final paper title once accepted.
+  title: "[paper title — to be added]"
+  authors:
+    - given-names: Taewan
+      family-names: Kim
+    - given-names: Eunchae
+      family-names: Song
+    - given-names: Soeun
+      family-names: Park
+    - given-names: Yoonseo
+      family-names: Cho
+    - given-names: Chae Yeon
+      family-names: Kim
+    - given-names: Dokshin
+      family-names: Lim
+  collection-title: "Adjunct Proceedings of the 18th International Conference on Automotive User Interfaces and Interactive Vehicular Applications (AutomotiveUI '26)"
+  year: 2026
+  notes: "Student Research Track"
