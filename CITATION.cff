@@ -49,7 +49,7 @@ keywords:
   - CARLA
 preferred-citation:
   type: conference-paper
-  title: "VLA-Grounded XAI HMI Design: A Passenger-in-the-Loop Testbed for SOTIF Error Situations in L5 Automated Vehicles"
+  title: "VLA-Based XAI HMI Design: A Passenger-in-the-Loop Testbed for SOTIF Error Situations in L5 Automated Vehicles"
   authors:
     - given-names: Taewan
       family-names: Kim

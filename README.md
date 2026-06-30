@@ -8,7 +8,7 @@ a VLA-grounded situation-awareness (SA) explanation HMI, delivered in two
 modalities (visual / voice), evaluated on a **Passenger-in-the-Loop (PiL)**
 CARLA + 6-DOF testbed.
 
-> Replication artifact for: *VLA-Grounded XAI HMI Design: A Passenger-in-the-Loop Testbed for SOTIF Error Situations in L5 Automated Vehicles*, AutoUI '26 (Student
+> Replication artifact for: *VLA-Based XAI HMI Design: A Passenger-in-the-Loop Testbed for SOTIF Error Situations in L5 Automated Vehicles*, AutoUI '26 (Student
 > Research Track). Authors: Taewan Kim, Eunchae Song, Soeun Park, Yoonseo Cho,
 > Chae Yeon Kim, Dokshin Lim (Hongik University).
 > Archived on Zenodo: [10.5281/zenodo.21068534](https://doi.org/10.5281/zenodo.21068534).
@@ -109,7 +109,7 @@ MIT — see [LICENSE](LICENSE).
 
 ```bibtex
 @inproceedings{kim2026vlaxai,
-  title     = {VLA-Grounded XAI HMI Design: A Passenger-in-the-Loop Testbed for SOTIF Error Situations in L5 Automated Vehicles},
+  title     = {VLA-Based XAI HMI Design: A Passenger-in-the-Loop Testbed for SOTIF Error Situations in L5 Automated Vehicles},
   author    = {Kim, Taewan and Song, Eunchae and Park, Soeun and Cho, Yoonseo and Kim, Chae Yeon and Lim, Dokshin},
   booktitle = {Adjunct Proceedings of the 18th International Conference on Automotive User Interfaces and Interactive Vehicular Applications (AutomotiveUI '26)},
   year      = {2026},
