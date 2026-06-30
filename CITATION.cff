@@ -49,8 +49,7 @@ keywords:
   - CARLA
 preferred-citation:
   type: conference-paper
-  # TODO: replace with the final paper title once accepted.
-  title: "[paper title — to be added]"
+  title: "VLA-Grounded XAI HMI Design: A Passenger-in-the-Loop Testbed for SOTIF Error Situations in L5 Automated Vehicles"
   authors:
     - given-names: Taewan
       family-names: Kim
