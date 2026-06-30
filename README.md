@@ -1,5 +1,7 @@
 # VLA-XAI-HMI-in-PiL
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21068534.svg)](https://doi.org/10.5281/zenodo.21068534)
+
 Code, stimuli, and testbed for the AutoUI '26 Student Research Track paper on
 **explaining vehicle functional-insufficiency (SOTIF FI/OI) to L5 passengers**:
 a VLA-grounded situation-awareness (SA) explanation HMI, delivered in two
@@ -8,7 +10,8 @@ CARLA + 6-DOF testbed.
 
 > Replication artifact for: *[paper title — to be added]*, AutoUI '26 (Student
 > Research Track). Authors: Taewan Kim, Eunchae Song, Soeun Park, Yoonseo Cho,
-> Chae Yeon Kim, Dokshin Lim (Hongik University). DOI: *[Zenodo — to be added]*.
+> Chae Yeon Kim, Dokshin Lim (Hongik University).
+> Archived on Zenodo: [10.5281/zenodo.21068534](https://doi.org/10.5281/zenodo.21068534).
 
 ## Repository layout
 

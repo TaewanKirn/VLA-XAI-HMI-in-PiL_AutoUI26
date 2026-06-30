@@ -34,8 +34,9 @@ authors:
     affiliation: "Hongik University"
     orcid: "https://orcid.org/0000-0002-5146-1830"
 repository-code: "https://github.com/TaewanKirn/VLA-XAI-HMI-in-PiL_AutoUI26"
+doi: "10.5281/zenodo.21068534"
 license: MIT
-version: 1.0.0
+version: 0.9.1
 date-released: "2026-06-30"
 keywords:
   - automotive user interface
@@ -46,8 +47,6 @@ keywords:
   - human-machine interface
   - passenger-in-the-loop
   - CARLA
-# After a Zenodo release, add the Concept DOI here, e.g.:
-# doi: "10.5281/zenodo.XXXXXXX"
 preferred-citation:
   type: conference-paper
   # TODO: replace with the final paper title once accepted.
