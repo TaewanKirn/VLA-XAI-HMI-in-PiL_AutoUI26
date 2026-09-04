@@ -1,6 +1,6 @@
 # VLA-XAI-HMI-in-PiL
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21068534.svg)](https://doi.org/10.5281/zenodo.21068534)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21068533.svg)](https://doi.org/10.5281/zenodo.21068533)
 
 Code, stimuli, and testbed for the AutoUI '26 Student Research Track paper on
 **explaining vehicle functional-insufficiency (SOTIF FI/OI) to L5 passengers**:
@@ -14,7 +14,14 @@ CARLA + 6-DOF testbed.
 > **Paper DOI: [10.1145/3828158.3834805](https://doi.org/10.1145/3828158.3834805)** (CC BY 4.0).
 > Authors: Taewan Kim, Soeun Park, Eunchae Song, Yoonseo Cho, Chaeyeon Kim, Nayoung Kim,
 > Jongwon Choe, Yunyoung Choi, Seojin Lee, Minchae Kim, Dokshin Lim (Hongik University).
-> Archived on Zenodo: [10.5281/zenodo.21068534](https://doi.org/10.5281/zenodo.21068534).
+> Archived on Zenodo: [10.5281/zenodo.21068533](https://doi.org/10.5281/zenodo.21068533)
+> — the concept DOI, which always resolves to the newest version.
+
+> ⚠️ **If you arrived from the DOI printed in the paper** (`10.5281/zenodo.21068534`): that
+> is the version DOI of the **v0.9.1** snapshot archived on 2026-06-30, before the paper was
+> finalised. It has an earlier title, six of the eleven authors, no explanation script and no
+> dry-run data. Use the concept DOI above, or follow Zenodo's "newer version" link, to reach
+> the current release.
 
 ## Repository layout
 
