@@ -2,33 +2,55 @@ cff-version: 1.2.0
 message: "If you use this software or its stimuli, please cite both the software and the paper below."
 title: "VLA-XAI-HMI-in-PiL: VLA-grounded situation-awareness explanation HMI on a Passenger-in-the-Loop CARLA + 6-DOF testbed"
 abstract: >-
-  Replication artifact for the AutoUI '26 Student Research Track paper on
+  Replication artifact for the AutomotiveUI '26 Student Research Track paper on
   explaining vehicle functional insufficiency (SOTIF FI/OI) to L5 passengers.
   Includes the CARLA 0.9.15 + 6-DOF scenarios (C1 frustration / C2 anxiety),
   6-DOF motion-cueing tuning, the scenarioQA six-metric tooling, the visual and
-  voice SA-explanation HMIs, and the SA explanation stimulus pool.
+  voice SA-explanation HMIs, the complete SA explanation stimulus pool in English
+  and Korean, and the raw telemetry and derived metrics from the human-free
+  dry-run marathon that back the results reported in the paper.
 type: software
 authors:
   - given-names: Taewan
     family-names: Kim
     affiliation: "Hongik University"
     orcid: "https://orcid.org/0009-0000-0033-0817"
-  - given-names: Eunchae
-    family-names: Song
-    affiliation: "Hongik University"
-    orcid: "https://orcid.org/0009-0005-3657-8538"
   - given-names: Soeun
     family-names: Park
     affiliation: "Hongik University"
     orcid: "https://orcid.org/0009-0003-0882-9657"
+  - given-names: Eunchae
+    family-names: Song
+    affiliation: "Hongik University"
+    orcid: "https://orcid.org/0009-0005-3657-8538"
   - given-names: Yoonseo
     family-names: Cho
     affiliation: "Hongik University"
     orcid: "https://orcid.org/0009-0003-1220-7973"
-  - given-names: Chae Yeon
+  - given-names: Chaeyeon
     family-names: Kim
     affiliation: "Hongik University"
     orcid: "https://orcid.org/0009-0006-4207-4771"
+  - given-names: Nayoung
+    family-names: Kim
+    affiliation: "Hongik University"
+    orcid: "https://orcid.org/0009-0000-7340-4936"
+  - given-names: Jongwon
+    family-names: Choe
+    affiliation: "Hongik University"
+    orcid: "https://orcid.org/0009-0006-5342-9398"
+  - given-names: Yunyoung
+    family-names: Choi
+    affiliation: "Hongik University"
+    orcid: "https://orcid.org/0009-0006-5785-1537"
+  - given-names: Seojin
+    family-names: Lee
+    affiliation: "Hongik University"
+    orcid: "https://orcid.org/0009-0002-9189-7855"
+  - given-names: Minchae
+    family-names: Kim
+    affiliation: "Hongik University"
+    orcid: "https://orcid.org/0009-0005-8662-8441"
   - given-names: Dokshin
     family-names: Lim
     affiliation: "Hongik University"
@@ -36,8 +58,8 @@ authors:
 repository-code: "https://github.com/TaewanKirn/VLA-XAI-HMI-in-PiL_AutoUI26"
 doi: "10.5281/zenodo.21068534"
 license: MIT
-version: 0.9.1
-date-released: "2026-06-30"
+version: 1.1.0
+date-released: "2026-09-04"
 keywords:
   - automotive user interface
   - explainable AI
@@ -49,20 +71,52 @@ keywords:
   - CARLA
 preferred-citation:
   type: conference-paper
-  title: "VLA-Based XAI HMI Design: A Passenger-in-the-Loop Testbed for SOTIF Error Situations in L5 Automated Vehicles"
+  title: "Student Research Track: Letting the Automated Vehicle Explain Its Own Errors: A Simulator Testbed for Passenger-Facing Explanation HMIs in SOTIF Error Situations"
   authors:
     - given-names: Taewan
       family-names: Kim
-    - given-names: Eunchae
-      family-names: Song
+      orcid: "https://orcid.org/0009-0000-0033-0817"
     - given-names: Soeun
       family-names: Park
+      orcid: "https://orcid.org/0009-0003-0882-9657"
+    - given-names: Eunchae
+      family-names: Song
+      orcid: "https://orcid.org/0009-0005-3657-8538"
     - given-names: Yoonseo
       family-names: Cho
-    - given-names: Chae Yeon
+      orcid: "https://orcid.org/0009-0003-1220-7973"
+    - given-names: Chaeyeon
       family-names: Kim
+      orcid: "https://orcid.org/0009-0006-4207-4771"
+    - given-names: Nayoung
+      family-names: Kim
+      orcid: "https://orcid.org/0009-0000-7340-4936"
+    - given-names: Jongwon
+      family-names: Choe
+      orcid: "https://orcid.org/0009-0006-5342-9398"
+    - given-names: Yunyoung
+      family-names: Choi
+      orcid: "https://orcid.org/0009-0006-5785-1537"
+    - given-names: Seojin
+      family-names: Lee
+      orcid: "https://orcid.org/0009-0002-9189-7855"
+    - given-names: Minchae
+      family-names: Kim
+      orcid: "https://orcid.org/0009-0005-8662-8441"
     - given-names: Dokshin
       family-names: Lim
-  collection-title: "Adjunct Proceedings of the 18th International Conference on Automotive User Interfaces and Interactive Vehicular Applications (AutomotiveUI '26)"
+      orcid: "https://orcid.org/0000-0002-5146-1830"
+  collection-title: "18th International Conference on Automotive User Interfaces and Interactive Vehicular Applications (AutomotiveUI Adjunct '26)"
+  conference:
+    name: "AutomotiveUI Adjunct '26"
+    city: "Gothenburg"
+    country: "SE"
+    date-start: "2026-09-20"
+    date-end: "2026-09-23"
+  publisher:
+    name: "Association for Computing Machinery"
   year: 2026
+  doi: "10.1145/3828158.3834805"
+  isbn: "979-8-4007-2815-0"
+  license: CC-BY-4.0
   notes: "Student Research Track"

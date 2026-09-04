@@ -34,11 +34,18 @@ is or will be placed here.
   e.g. min-TTC 1.205 s, max-yaw 1.965 rad/s, max-jerk 49.9 m/s³.
   recovery 150.7 s / arc 223.6 s (CV < 2 %). A controlled, repeatable stimulus.
 - **C2 (anxiety / aquaplaning, Town04) — stochastic.** Events fire at 30/60/90 s.
-  100 runs; ~19 % end in an uncontrolled crash (truncated at first collision:
-  92/103 analysable, 11 excluded for an early <90 s crash). Even after truncation
+  **N = 89**, the figure reported in the paper: of the 100 `status == ok` runs, 11
+  crashed before the third escalation event (E3, downhill) and are dropped as missing
+  data (`excluded_early_crash`), leaving 80 collision-free plus 9 truncated at a late
+  collision. That 11 % is the collision loss reported in §3–§4. Even after truncation
   the hazard metrics (yaw-rate, TTC, recovery) keep a high CV — this is the
   **intrinsic non-determinism of the PhysX water-friction (aquaplaning) solver**,
-  not noise; C2 is characterised by a distribution (mean ± SD over 100 runs).
+  not noise; C2 is characterised by a distribution rather than a point estimate.
+
+  > `c2_truncated_metrics.csv` carries 103 rows because the script was run over every
+  > file in `C2/`, including 3 watchdog-killed runs (`exit_3221226505`: runs 424, 426,
+  > 432) that it scores as `clean` but that are **not** in the analysis set. Filtering
+  > on `status == ok` in `marathon_summary.csv` first is what yields 89 rather than 92.
 
 ## How it is produced
 
