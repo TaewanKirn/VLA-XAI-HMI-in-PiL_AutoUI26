@@ -44,9 +44,9 @@ import ControlPanel from './components/ControlPanel'
 //   🟢 normal #34C759 / 🔴 errored #FF3B30 / 🟠 progressing #FF9500 / 🟡 resolving #FFCC00
 const STATUS_VARIANTS = {
   normal:      { text: '정상 주행 중입니다',       color: '#34C759' }, // 🟢
-  errored:     { text: '오류가 감지되었습니다',     color: '#FF3B30' }, // 🔴
-  progressing: { text: '오류 원인을 파악 중입니다', color: '#FF9500' }, // 🟠
-  resolving:   { text: '오류를 해결 중입니다',      color: '#FFCC00' }, // 🟡
+  errored:     { text: '불편할 수 있는 상황이 감지되었습니다', color: '#FF3B30' }, // 🔴
+  progressing: { text: '상황 원인을 파악하고 있습니다', color: '#FF9500' }, // 🟠
+  resolving:   { text: '상황을 조정하고 있습니다',      color: '#FFCC00' }, // 🟡
 }
 
 // ── VLA scenario sequences (출처: sequence.md) ───────────────────
@@ -72,16 +72,16 @@ const SEQUENCES = {
   ],
   aquaplaning: [
     { status: 'normal',      hero: '목적지까지 안전하게 주행 중입니다.',                                       sub: null,                                                              judgment: '평지 구간 정상 주행' },                    // C2-1
-    { status: 'errored',     hero: '차량이 순간적으로 크게 요동쳤습니다.',                                     sub: '타이어 접지력이 급격히 떨어져 미끄럼이 발생했습니다.',              judgment: '접지력 급감 · 미끄럼 감지' },              // C2-2
-    { status: 'progressing', hero: '노면의 물웅덩이를 미리 감지하지 못했습니다.',                                sub: '이로 인해 수막현상이 발생했습니다.',                              judgment: '수막현상 원인 분석' },                     // C2-3
+    { status: 'errored',     hero: '차량이 순간적으로 크게 요동쳤습니다.',                                     sub: '타이어 접지력이 떨어져 추가 미끄럼이 발생할 수 있습니다.',              judgment: '접지력 급감 · 미끄럼 감지' },              // C2-2
+    { status: 'progressing', hero: '센서가 물웅덩이를 미리 파악하지 못했습니다.',                                sub: '노면 상태를 더 민감하게 읽겠습니다.',                              judgment: '수막현상 원인 분석' },                     // C2-3
     { status: 'resolving',   hero: '재발 방지를 위해 속도를 낮춰 서행합니다.',                                 sub: '약 N초 후 정상 마찰 상태로 복귀할 예정입니다.',                    judgment: '평지 감속 · 서행 진입' },                   // C2-4
     { status: 'normal',      hero: '목적지까지 안전하게 주행 중입니다.',                                       sub: null,                                                              judgment: '평지 정상 마찰 복귀' },                    // C2-5
-    { status: 'errored',     hero: '다시 차량이 요동쳤습니다.',                                                sub: '노면 접지력 저하가 원인입니다.',                                  judgment: '오르막 요동 재감지' },                     // C2-6
+    { status: 'errored',     hero: '다시 차량이 요동쳤습니다.',                                                sub: '즉시 속도를 줄입니다.',                                  judgment: '오르막 요동 재감지' },                     // C2-6
     { status: 'progressing', hero: '오르막 중턱 물웅덩이를 파악하지 못했습니다.',                                sub: '수막현상 방지를 위해 보수적으로 주행합니다.',                      judgment: '오르막 중턱 물웅덩이 미감지' },             // C2-7 (260626 동치: 음성·정본과 '중턱' 통일)
     { status: 'resolving',   hero: '지형 경사까지 고려해 더 일찍 감속합니다.',                                  sub: '도착 예정 시간에는 큰 차이가 없습니다.',                          judgment: '경사 고려 조기 감속' },                     // C2-8
     { status: 'normal',      hero: '목적지까지 안전하게 주행 중입니다.',                                       sub: null,                                                              judgment: '오르막 정상 마찰 복귀' },                   // C2-9
-    { status: 'errored',     hero: '내리막 구간에서 차량이 크게 흔들렸습니다.',                                 sub: '노면 접지력을 잃었습니다.',                                        judgment: '내리막 요동 감지' },                       // C2-10
-    { status: 'progressing', hero: '센서 시야에 물웅덩이가 파악되지 않았습니다.',                                sub: '내리막 가속이 더해져 요동이 커졌습니다.',                          judgment: '센서 사각 + 내리막 가속' },                 // C2-11
+    { status: 'errored',     hero: '내리막 구간에서 차량이 크게 흔들렸습니다.',                                 sub: '접지력을 더 잃지 않기 위해 반대조향합니다.',                                        judgment: '내리막 요동 감지' },                       // C2-10
+    { status: 'progressing', hero: '센서 시야에 물웅덩이가 파악되지 않았습니다.',                                sub: '내리막 경사까지 반영해 더 신중히 감속하겠습니다.',                          judgment: '센서 사각 + 내리막 가속' },                 // C2-11
     { status: 'resolving',   hero: '더이상 수막현상이 발생하지 않도록 주행 속도를 낮춥니다.',                    sub: '규정속도의 40%인 25km/h로 속도를 유지합니다.',                    judgment: '25km/h 보수 주행 유지' },                    // C2-12
     { status: 'normal',      hero: '목적지까지 안전하게 주행 중입니다.',                                       sub: null,                                                              judgment: '내리막 정상 마찰 복귀' },                   // C2-13
   ],
@@ -914,7 +914,11 @@ function VehicleHMI() {
               {/* XAI block — pill로부터 15px 간격.
                   Hero 가 먼저 나타나고, sub 는 delay 후 등장 → 시퀀스 step
                   변할 때 두 라인이 동시에 랜덤 순서로 뜨는 인상 제거. */}
-              <div className="flex flex-col items-center" style={{ marginTop: 15 }}>
+              {/* 260701: XAI 텍스트 블록을 hero maxWidth(1478)와 동일한 고정 폭으로 고정.
+                  이전엔 이 컨테이너가 hug → sub(width:100%)가 hero 텍스트 폭에 묶여, hero가
+                  짧고 sub가 긴 단계(C2-6·C2-2·C1-4·C2-11)에서 sub가 hero 폭에 갇혀 두 줄로 넘침.
+                  고정 폭으로 sub도 전체 폭을 써 한 줄에 들어옴(자극물 문구·음성·정본 무변경). */}
+              <div className="flex flex-col items-center" style={{ marginTop: 15, width: 1478, maxWidth: '100%' }}>
                 <AnimatePresence mode="wait">
                   <motion.p
                     key={`${heroText}#${deadlockFlash}`}
@@ -962,6 +966,7 @@ function VehicleHMI() {
                           margin: 0,
                           position: 'absolute',
                           inset: 0,
+                          whiteSpace: 'nowrap', // 260701: sub는 항상 한 줄(넘침 방지; 폭은 위 1478 블록에서 확보)
                         }}
                       >
                         {subText}

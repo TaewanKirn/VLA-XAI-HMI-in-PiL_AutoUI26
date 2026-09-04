@@ -20,9 +20,9 @@
 //   🟢 정상 / 🔴 감지 / 🟠 원인 파악 / 🟡 해결 중.
 // `tone`(normal|warning)은 펄스 속도 등 거친 분기에 쓰고, `color`는 표시등 점 색.
 const STATUS_OK      = { tone: 'normal',  color: '#21C46A', text: '정상 주행 중입니다' }      // 🟢
-const STATUS_DETECT  = { tone: 'warning', color: '#EF4444', text: '오류가 감지되었습니다' }    // 🔴
-const STATUS_CAUSE   = { tone: 'warning', color: '#F97316', text: '오류 원인을 파악 중입니다' } // 🟠
-const STATUS_RESOLVE = { tone: 'warning', color: '#EAB308', text: '오류를 해결 중입니다' }     // 🟡
+const STATUS_DETECT  = { tone: 'warning', color: '#EF4444', text: '불편할 수 있는 상황이 감지되었습니다' }    // 🔴
+const STATUS_CAUSE   = { tone: 'warning', color: '#F97316', text: '상황 원인을 파악하고 있습니다' } // 🟠
+const STATUS_RESOLVE = { tone: 'warning', color: '#EAB308', text: '상황을 조정하고 있습니다' }     // 🟡
 
 // C1 ─ 회전교차로 밀집교통 (답답함). 9 페이즈.
 // 발화 정본 = Figma 정리판 v5 (2026-06-23). 정상(🟢) 페이즈도 "정상 주행 중입니다" 발화
@@ -43,16 +43,16 @@ const C1_PHASES = [
 // 발화 정본 = Figma 정리판 v5 (2026-06-23). 정상(🟢) 페이즈도 "정상 주행 중입니다" 발화.
 const C2_PHASES = [
   { status: STATUS_OK,      speech: '정상 주행 중입니다' }, // C2-1
-  { status: STATUS_DETECT,  speech: '차량이 순간적으로 크게 요동쳤습니다. 타이어 접지력이 급격히 떨어져 미끄럼이 발생했습니다.' }, // C2-2 (260626 동치: 시각 sub 와 '타이어' 통일)
-  { status: STATUS_CAUSE,   speech: '노면의 물웅덩이를 미리 감지하지 못했습니다. 이로 인해 수막현상이 발생했습니다.' }, // C2-3
+  { status: STATUS_DETECT,  speech: '차량이 순간적으로 크게 요동쳤습니다. 타이어 접지력이 떨어져 추가 미끄럼이 발생할 수 있습니다.' }, // C2-2 (260702 Zoom-Out을 예측(SA3)으로 수정 · 시각 sub 와 글자단위 동치)
+  { status: STATUS_CAUSE,   speech: '센서가 물웅덩이를 미리 파악하지 못했습니다. 노면 상태를 더 민감하게 읽겠습니다.' }, // C2-3
   { status: STATUS_RESOLVE, speech: '재발 방지를 위해 속도를 낮춰 서행합니다. 약 N초 후 정상 마찰 상태로 복귀할 예정입니다.' }, // C2-4
   { status: STATUS_OK,      speech: '정상 주행 중입니다' }, // C2-5
-  { status: STATUS_DETECT,  speech: '다시 차량이 요동쳤습니다. 노면 접지력 저하가 원인입니다.' }, // C2-6
+  { status: STATUS_DETECT,  speech: '다시 차량이 요동쳤습니다. 즉시 속도를 줄입니다.' }, // C2-6
   { status: STATUS_CAUSE,   speech: '오르막 중턱 물웅덩이를 파악하지 못했습니다. 수막현상 방지를 위해 보수적으로 주행합니다.' }, // C2-7
   { status: STATUS_RESOLVE, speech: '지형 경사까지 고려해 더 일찍 감속합니다. 도착 예정 시간에는 큰 차이가 없습니다.' }, // C2-8
   { status: STATUS_OK,      speech: '정상 주행 중입니다' }, // C2-9
-  { status: STATUS_DETECT,  speech: '내리막 구간에서 차량이 크게 흔들렸습니다. 노면 접지력을 잃었습니다.' }, // C2-10
-  { status: STATUS_CAUSE,   speech: '센서 시야에 물웅덩이가 파악되지 않았습니다. 내리막 가속이 더해져 요동이 커졌습니다.' }, // C2-11
+  { status: STATUS_DETECT,  speech: '내리막 구간에서 차량이 크게 흔들렸습니다. 접지력을 더 잃지 않기 위해 반대조향합니다.' }, // C2-10
+  { status: STATUS_CAUSE,   speech: '센서 시야에 물웅덩이가 파악되지 않았습니다. 내리막 경사까지 반영해 더 신중히 감속하겠습니다.' }, // C2-11
   { status: STATUS_RESOLVE, speech: '더이상 수막현상이 발생하지 않도록 주행 속도를 낮춥니다. 규정속도의 40%인 25km/h로 속도를 유지합니다.' }, // C2-12 (260626 동치: 시각 hero+sub 와 글자단위 통일)
   { status: STATUS_OK,      speech: '정상 주행 중입니다' }, // C2-13
 ]
