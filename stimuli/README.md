@@ -20,6 +20,7 @@ Table 1 of the paper prints only the two ★ rows for space; this file is the fu
 | File | What it is | Language |
 |------|------------|----------|
 | `explanation_script.md` | **Full stimulus pool** — all SA sentences, per phase, both modalities. Start here. | EN + KO |
+| `explanation_script.xlsx` | The same table as a workbook — one sheet per scenario, filterable, plus the AutopilotStatus vocabulary. Built by `build_explanation_xlsx.py`. | EN + KO |
 | `ScenarioSetting.md` | Canonical screen sequence — C1 (frustration, 9 phases) and C2 (anxiety, 13 phases), AutopilotStatus 5-state, SA Zoom-In/Out. Single source of truth for the stimulus timeline. | KO |
 | `VLA_mapping_v5.md` | Scenario-phase × VLA mapping — which SA sentence is shown at each error phase (🔴 detect → 🟠 cause → 🟡 resolve). Text mirror of the design master. | KO |
 | `commentary_mapping.md` | SA-level vocabulary source and faithfulness notes (the basis for SA1/2/3 wording). | KO |

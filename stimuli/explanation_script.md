@@ -4,6 +4,11 @@ Every situation-awareness (SA) explanation the vehicle presents in the two error
 scenarios, for both HMI modalities. Table 1 of the paper shows only the two
 FI back-inference rows (`C1-5`, `C2-3`); this file is the complete set.
 
+> **Also available as a workbook:** [`explanation_script.xlsx`](explanation_script.xlsx)
+> — same content with one sheet per scenario, filterable columns, and the
+> AutopilotStatus vocabulary. Regenerate with
+> [`build_explanation_xlsx.py`](build_explanation_xlsx.py).
+
 - **Presentation language is Korean** (participants are Korean speakers). The English
   column is the authored caption used in the paper and the submission video, not a
   presented stimulus.

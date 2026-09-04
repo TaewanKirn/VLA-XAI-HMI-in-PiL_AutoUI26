@@ -42,7 +42,8 @@ data/                  Dry-run raw telemetry (210 runs) + QA metrics CSVs
 Table 1 of the paper prints only the two FI back-inference rows. The **complete stimulus
 pool** — every SA sentence for both scenarios, in English and Korean, with the triggering
 CARLA event per phase — is
-**[`stimuli/explanation_script.md`](stimuli/explanation_script.md)**.
+**[`stimuli/explanation_script.md`](stimuli/explanation_script.md)**, also provided as a
+workbook: **[`stimuli/explanation_script.xlsx`](stimuli/explanation_script.xlsx)**.
 
 ## Paper → artifact map
 
